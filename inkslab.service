@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /home/pi/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab.py
-WorkingDirectory=/home/pi/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples
+ExecStart=/usr/bin/python3 /home/pi/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display/inkslab.py
+WorkingDirectory=/home/pi/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
 Restart=always
 RestartSec=30
 

@@ -50,9 +50,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- HARDWARE SETUP ---
-libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
-if os.path.exists(libdir):
-    sys.path.append(libdir)
+# Try the Waveshare SDK lib (three levels up: project dir -> examples -> python -> lib)
+_script_dir = os.path.dirname(os.path.realpath(__file__))
+_sdk_libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(_script_dir))), 'lib')
+_local_libdir = os.path.join(_script_dir, 'lib')
+
+if os.path.exists(_sdk_libdir):
+    sys.path.insert(0, _sdk_libdir)
+if os.path.exists(_local_libdir):
+    sys.path.insert(0, _local_libdir)
+
 from waveshare_epd import epd4in0e
 
 # --- LOAD MASTER INDEX ---
