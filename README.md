@@ -15,7 +15,7 @@ Cards rotate every **10 minutes** during the day and every **hour** at night to 
 - **90-degree micro USB cable** (recommended) — keeps the power cable hidden behind the frame instead of sticking out the side
 
 ### 3D Printed Frame
-Print files available on MakerWorld: **[link coming soon]**
+Print files available on MakerWorld: **[InkSlab on MakerWorld](https://makerworld.com/en/models/2452200-inkslab-open-source-e-ink-tcg-display)**
 
 The frame holds the Pi and e-paper screen in a clean, desk-friendly package. Just print, assemble, and plug in.
 
