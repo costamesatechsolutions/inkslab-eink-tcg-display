@@ -6,6 +6,8 @@ A Raspberry Pi + e-ink display that cycles through TCG cards in a graded-slab-st
 
 Cards rotate every **10 minutes** during the day and every **hour** at night to preserve the display.
 
+Includes a **web dashboard** at `http://inkslab.local` for switching TCGs, adjusting settings, managing your card collection, and downloading new sets — all from your phone.
+
 **By [Costa Mesa Tech Solutions](https://github.com/costamesatechsolutions)** (a brand of Pine Heights Ventures LLC)
 
 ## What You Need
@@ -32,7 +34,7 @@ The frame holds the Pi and e-paper screen in a clean, desk-friendly package. Jus
 1. A download script fetches card images and metadata from an open data source (PokemonTCG GitHub repo or Scryfall for MTG)
 2. `inkslab.py` shuffles all cards into a "deck", processes each image for the 7-color e-paper palette (Floyd-Steinberg dithering), and displays them in a loop
 3. A systemd service keeps it running as a daemon on boot
-4. Change `ACTIVE_TCG` in `inkslab.py` to switch between Pokemon and MTG
+4. The web dashboard lets you switch TCGs, change settings, manage your collection, and download new sets from your phone
 
 ## Display Layout
 
@@ -90,7 +92,7 @@ sudo reboot
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero python3-requests git unzip screen
+sudo apt-get install -y python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero python3-requests python3-flask git unzip screen
 ```
 
 ### 3. Install Hardware Libraries
@@ -172,16 +174,9 @@ To **re-attach** later and check progress:
 screen -r downloader
 ```
 
-### 7. Build Metadata (Pokemon only)
+> **Note:** You can also trigger downloads from the web dashboard later (see step 9).
 
-MTG metadata is built automatically by the download script. For Pokemon, run the metadata script separately:
-
-```bash
-cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
-python3 scripts/update_metadata_pokemon.py
-```
-
-### 8. Choose Your TCG
+### 7. Choose Your TCG
 
 Edit the top of `inkslab.py` and set `ACTIVE_TCG` to whichever game you want to display:
 
@@ -189,7 +184,9 @@ Edit the top of `inkslab.py` and set `ACTIVE_TCG` to whichever game you want to 
 ACTIVE_TCG = "pokemon"  # "pokemon" or "mtg"
 ```
 
-### 9. Test It
+Or skip this — you can switch TCGs from the web dashboard.
+
+### 8. Test It
 
 ```bash
 cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
@@ -198,68 +195,92 @@ python3 inkslab.py
 
 You should see a random card appear on the display within ~30 seconds.
 
-### 10. Run on Boot (Daemon)
+### 9. Run on Boot (Daemon)
+
+**Display service:**
 
 ```bash
 sudo cp inkslab.service /etc/systemd/system/inkslab.service
-```
-
-```bash
 sudo systemctl enable inkslab.service
 sudo systemctl start inkslab.service
 ```
 
-Check that it's running:
+**Web dashboard:**
+
+```bash
+sudo cp inkslab_web.service /etc/systemd/system/inkslab_web.service
+sudo systemctl enable inkslab_web.service
+sudo systemctl start inkslab_web.service
+```
+
+The dashboard is now live at **http://inkslab.local** — open it on your phone or computer.
+
+Check that both services are running:
 
 ```bash
 journalctl -u inkslab.service -f
+journalctl -u inkslab_web.service -f
 ```
 
-To restart after editing the script:
+## Web Dashboard
 
-```bash
-sudo systemctl restart inkslab.service
-```
+Access the dashboard at `http://inkslab.local` from any device on your network.
+
+| Tab | Features |
+|-----|----------|
+| **Display** | See the current card, skip to next card, quick-switch between Pokemon and MTG |
+| **Settings** | Change rotation interval, day/night hours, display rotation, color saturation, enable collection mode |
+| **Collection** | Browse all downloaded sets and cards, mark which cards you own, select/deselect entire sets |
+| **Downloads** | See storage stats, trigger new downloads for Pokemon or MTG, view live download progress |
+
+When **collection mode** is enabled in Settings, the display only cycles through cards you've marked as owned.
 
 ## Project Structure
 
 ```
 inkslab-eink-tcg-display/
 ├── inkslab.py                      # Main display script (runs as daemon)
-├── inkslab.service                  # systemd service file
+├── inkslab_web.py                   # Web dashboard (Flask)
+├── inkslab.service                  # systemd service for display
+├── inkslab_web.service              # systemd service for web dashboard
 ├── requirements.txt                 # Python dependencies
 ├── lib/
 │   └── waveshare_epd/              # e-Paper display driver (bundled)
 │       ├── epd4in0e.py              # 4" Spectra 6 driver
 │       └── epdconfig.py             # Hardware config (SPI/GPIO)
 └── scripts/
-    ├── download_cards_pokemon.py    # Download Pokemon card images
-    ├── update_metadata_pokemon.py   # Fetch Pokemon set names, numbers, rarities
+    ├── download_cards_pokemon.py    # Download Pokemon card images + metadata
     └── download_cards_mtg.py        # Download MTG card images + metadata (Scryfall)
 ```
 
 ## Configuration
 
-Edit the top of `inkslab.py` to customize:
+Settings can be changed from the web dashboard or by editing the config file directly.
+
+**Config file:** `/home/pi/inkslab_config.json`
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `ACTIVE_TCG` | `"pokemon"` | Which TCG to display (`"pokemon"` or `"mtg"`) |
-| `ROTATION_ANGLE` | `270` | Display rotation (0/90/180/270) |
-| `DAY_INTERVAL` | `600` (10 min) | Seconds between cards during the day |
-| `NIGHT_INTERVAL` | `3600` (1 hr) | Seconds between cards at night |
-| `DAY_START` / `DAY_END` | `7` / `23` | Day mode hours (24h format) |
-| `COLOR_SATURATION` | `2.5` | Color boost for e-paper (higher = more vivid) |
+| `active_tcg` | `"pokemon"` | Which TCG to display (`"pokemon"` or `"mtg"`) |
+| `rotation_angle` | `270` | Display rotation (0/90/180/270) |
+| `day_interval` | `600` (10 min) | Seconds between cards during the day |
+| `night_interval` | `3600` (1 hr) | Seconds between cards at night |
+| `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |
+| `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid) |
+| `collection_only` | `false` | Only show cards marked as owned |
+
+If no config file exists, the display uses built-in defaults and works normally.
 
 ## Adding New Sets
 
-When new sets release, re-run the download script for your TCG:
+From the **web dashboard**: go to the Downloads tab and tap the download button.
+
+From **SSH**:
 
 **Pokemon:**
 ```bash
 cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
 python3 scripts/download_cards_pokemon.py
-python3 scripts/update_metadata_pokemon.py
 ```
 
 **MTG:**
@@ -268,7 +289,7 @@ cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-dis
 python3 scripts/download_cards_mtg.py
 ```
 
-Then restart the service:
+Then restart the display service:
 
 ```bash
 sudo systemctl restart inkslab.service
@@ -281,8 +302,10 @@ sudo systemctl restart inkslab.service
 | `No module named waveshare_epd` | Make sure the repo is cloned inside the Waveshare `examples/` directory (see step 5). The `lib/` folder in the repo contains the driver as a fallback. |
 | Display not updating | Check SPI is enabled: `ls /dev/spi*` should show devices |
 | Service won't start | Check logs: `journalctl -u inkslab.service -f` |
-| Washed-out colors | Increase `COLOR_SATURATION` in `inkslab.py` (default 2.5) |
+| Washed-out colors | Increase `color_saturation` in the web dashboard or config file (default 2.5) |
 | SSH can't connect | Make sure SSH was enabled in Raspberry Pi Imager settings. Check the Pi is on your Wi-Fi network. |
+| Web dashboard not loading | Check `journalctl -u inkslab_web.service -f`. Make sure Flask is installed: `sudo apt install python3-flask` |
+| Collection mode shows nothing | Make sure you've marked some cards as owned in the Collection tab first |
 
 ## Credits
 

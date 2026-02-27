@@ -1,0 +1,14 @@
+[Unit]
+Description=InkSlab Web Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /home/pi/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display/inkslab_web.py
+WorkingDirectory=/home/pi/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

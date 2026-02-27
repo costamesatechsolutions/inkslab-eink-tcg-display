@@ -20,28 +20,33 @@ import gc
 import logging
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
 
-# --- CONFIGURATION ---
-ACTIVE_TCG = "pokemon"  # "pokemon" or "mtg"
+# --- DEFAULT CONFIGURATION ---
+# These defaults are used if no config file exists.
+# The web dashboard writes to the config file to change settings on the fly.
+DEFAULTS = {
+    "active_tcg": "pokemon",
+    "rotation_angle": 270,
+    "day_interval": 600,
+    "night_interval": 3600,
+    "day_start": 7,
+    "day_end": 23,
+    "color_saturation": 2.5,
+    "collection_only": False,
+}
 
 TCG_LIBRARIES = {
     "pokemon": "/home/pi/pokemon_cards",
     "mtg": "/home/pi/mtg_cards",
 }
 
-LIBRARY_DIR = TCG_LIBRARIES[ACTIVE_TCG]
-INDEX_FILE = os.path.join(LIBRARY_DIR, "master_index.json")
-ROTATION_ANGLE = 270  # Rotate for display orientation
+CONFIG_FILE = "/home/pi/inkslab_config.json"
+COLLECTION_FILE = "/home/pi/inkslab_collection.json"
+STATUS_FILE = "/tmp/inkslab_status.json"
+NEXT_TRIGGER = "/tmp/inkslab_next"
 
-# Display timing (seconds)
-DAY_INTERVAL = 600    # 10 minutes during daytime
-NIGHT_INTERVAL = 3600 # 1 hour at night
-DAY_START = 7         # 7:00 AM
-DAY_END = 23          # 11:00 PM
-
-# Image processing
+# Image processing (not configurable via web — these are display-specific)
 DISPLAY_WIDTH = 400
 DISPLAY_HEIGHT = 600
-COLOR_SATURATION = 2.5
 CONTRAST_BOOST = 1.1
 SHARPNESS_BOOST = 1.4
 
@@ -69,19 +74,56 @@ if os.path.exists(_local_libdir):
 
 from waveshare_epd import epd4in0e
 
-# --- LOAD MASTER INDEX ---
-MASTER_INDEX = {}
-if os.path.exists(INDEX_FILE):
-    with open(INDEX_FILE, 'r') as f:
-        MASTER_INDEX = json.load(f)
-    logger.info(f"Loaded master index with {len(MASTER_INDEX)} sets")
-else:
-    logger.warning(f"Master index not found at {INDEX_FILE}")
+
+def load_config():
+    """Load config from file, falling back to defaults for missing keys."""
+    config = dict(DEFAULTS)
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                saved = json.load(f)
+            config.update(saved)
+        except Exception as e:
+            logger.warning(f"Error reading config: {e}, using defaults")
+    return config
 
 
-def get_card_metadata(img_path):
+def load_collection(tcg):
+    """Load the collection list for a given TCG. Returns a set of card IDs."""
+    if os.path.exists(COLLECTION_FILE):
+        try:
+            with open(COLLECTION_FILE, 'r') as f:
+                data = json.load(f)
+            return set(data.get(tcg, []))
+        except Exception:
+            pass
+    return set()
+
+
+def load_master_index(library_dir):
+    """Load the master set index from a library directory."""
+    index_file = os.path.join(library_dir, "master_index.json")
+    if os.path.exists(index_file):
+        try:
+            with open(index_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def write_status(info):
+    """Write current display status for the web dashboard."""
+    try:
+        with open(STATUS_FILE, 'w') as f:
+            json.dump(info, f)
+    except Exception:
+        pass
+
+
+def get_card_metadata(img_path, master_index):
     """Extract set name, card number, and rarity from card image path."""
-    info = {"set_info": "", "stats": ""}
+    info = {"set_info": "", "stats": "", "set_name": "", "card_num": "", "rarity": ""}
     try:
         folder_path = os.path.dirname(img_path)
         filename = os.path.basename(img_path)
@@ -89,12 +131,14 @@ def get_card_metadata(img_path):
         card_id = os.path.splitext(filename)[0]
 
         # Set info (top line)
-        if set_id in MASTER_INDEX:
-            year = MASTER_INDEX[set_id]["year"]
-            real_set = MASTER_INDEX[set_id]["name"].upper().replace(" AND ", " & ")
+        if set_id in master_index:
+            year = master_index[set_id]["year"]
+            real_set = master_index[set_id]["name"].upper().replace(" AND ", " & ")
             info["set_info"] = f"{year} {real_set}"
+            info["set_name"] = master_index[set_id]["name"]
         else:
             info["set_info"] = set_id.upper()
+            info["set_name"] = set_id
 
         # Card stats (bottom line)
         num = "00"
@@ -118,6 +162,9 @@ def get_card_metadata(img_path):
             if parts[-1].isdigit():
                 num = parts[-1]
 
+        info["card_num"] = f"#{num}"
+        info["rarity"] = extra
+
         # Format: "#201  •  HOLO" or just "#201"
         if extra:
             info["stats"] = f"#{num}  \u2022  {extra}"
@@ -129,9 +176,9 @@ def get_card_metadata(img_path):
     return info
 
 
-def create_slab_layout(img_path):
+def create_slab_layout(img_path, master_index, color_saturation):
     """Create a PSA-slab-style layout with card info header above the card image."""
-    info = get_card_metadata(img_path)
+    info = get_card_metadata(img_path, master_index)
 
     with Image.open(img_path) as card:
         card = card.convert("RGB")
@@ -181,7 +228,7 @@ def create_slab_layout(img_path):
             draw.text(((DISPLAY_WIDTH - w1) / 2, start_y), line1, font=font_set, fill=(0, 0, 0))
             draw.text(((DISPLAY_WIDTH - w2) / 2, start_y + h1 + gap), line2, font=font_stats, fill=(0, 0, 0))
 
-        return canvas
+        return canvas, info
 
 
 def create_palette_image():
@@ -192,13 +239,13 @@ def create_palette_image():
     return p_img
 
 
-def process_image(img_path):
+def process_image(img_path, master_index, config):
     """Full image pipeline: layout -> enhance -> dither -> rotate for display."""
     try:
-        img = create_slab_layout(img_path)
+        img, info = create_slab_layout(img_path, master_index, config["color_saturation"])
 
         # Boost colors for the e-paper display
-        img = ImageEnhance.Color(img).enhance(COLOR_SATURATION)
+        img = ImageEnhance.Color(img).enhance(config["color_saturation"])
         img = ImageEnhance.Contrast(img).enhance(CONTRAST_BOOST)
         img = ImageEnhance.Sharpness(img).enhance(SHARPNESS_BOOST)
 
@@ -206,18 +253,20 @@ def process_image(img_path):
         palette_ref = create_palette_image()
         img_dithered = img.quantize(palette=palette_ref, dither=Image.Dither.FLOYDSTEINBERG)
 
-        return img_dithered.convert("RGB").rotate(ROTATION_ANGLE, expand=True)
+        return img_dithered.convert("RGB").rotate(config["rotation_angle"], expand=True), info
     except Exception as e:
         logger.error(f"Image processing error: {e}")
-        return None
+        return None, {}
 
 
 class ShuffleDeck:
     """Manages a shuffled deck of all card image paths. Re-shuffles when exhausted."""
 
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, collection=None):
         self.root_dir = root_dir
+        self.collection = collection
         self.deck = []
+        self.total = 0
         self.reshuffle()
 
     def reshuffle(self):
@@ -226,20 +275,78 @@ class ShuffleDeck:
         for root, dirs, files in os.walk(self.root_dir):
             for f in files:
                 if f.endswith(".png") and not f.startswith("_"):
+                    # If collection mode, only include owned cards
+                    if self.collection:
+                        card_id = os.path.splitext(f)[0]
+                        if card_id not in self.collection:
+                            continue
                     temp.append(os.path.join(root, f))
         random.shuffle(temp)
         self.deck = temp
-        logger.info(f"Deck loaded: {len(self.deck)} cards")
+        self.total = len(temp)
+        logger.info(f"Deck loaded: {self.total} cards")
 
     def draw(self):
         if not self.deck:
             self.reshuffle()
+        if not self.deck:
+            return None
         return self.deck.pop(0)
+
+
+def wait_with_polling(seconds, config_check_interval=30):
+    """Sleep for `seconds`, but check for next-card trigger every 1s and config every 30s."""
+    config = load_config()
+    last_config_check = time.time()
+
+    for _ in range(seconds):
+        # Check for skip trigger
+        if os.path.exists(NEXT_TRIGGER):
+            try:
+                os.remove(NEXT_TRIGGER)
+            except OSError:
+                pass
+            logger.info("Skip trigger detected — advancing to next card")
+            return load_config(), True  # config, tcg_changed
+
+        # Periodically re-read config
+        if time.time() - last_config_check >= config_check_interval:
+            new_config = load_config()
+            tcg_changed = new_config["active_tcg"] != config["active_tcg"]
+            if tcg_changed:
+                logger.info(f"TCG changed to {new_config['active_tcg']}")
+                return new_config, True
+            config = new_config
+            last_config_check = time.time()
+
+        time.sleep(1)
+
+    return config, False
 
 
 def main():
     logger.info("InkSlab starting...")
-    deck = ShuffleDeck(LIBRARY_DIR)
+
+    config = load_config()
+    active_tcg = config["active_tcg"]
+    library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+    master_index = load_master_index(library_dir)
+
+    # Load collection if collection mode is on
+    collection = None
+    if config["collection_only"]:
+        collection = load_collection(active_tcg)
+        if collection:
+            logger.info(f"Collection mode: {len(collection)} owned cards")
+        else:
+            logger.info("Collection mode on but no cards marked — showing all")
+            collection = None
+
+    deck = ShuffleDeck(library_dir, collection)
+
+    if deck.total == 0:
+        logger.error(f"No cards found in {library_dir}")
+        return
 
     try:
         epd = epd4in0e.EPD()
@@ -252,8 +359,14 @@ def main():
 
     while True:
         card_path = deck.draw()
+        if not card_path:
+            logger.warning("No cards available. Waiting 60s...")
+            time.sleep(60)
+            config = load_config()
+            continue
+
         logger.info(f"Displaying: {os.path.basename(card_path)}")
-        final_img = process_image(card_path)
+        final_img, card_info = process_image(card_path, master_index, config)
 
         if final_img:
             try:
@@ -263,11 +376,38 @@ def main():
             except Exception as e:
                 logger.error(f"Display error: {e}")
 
+            # Write status for web dashboard
+            write_status({
+                "card_path": card_path,
+                "set_name": card_info.get("set_name", ""),
+                "set_info": card_info.get("set_info", ""),
+                "card_num": card_info.get("card_num", ""),
+                "rarity": card_info.get("rarity", ""),
+                "timestamp": int(time.time()),
+                "tcg": active_tcg,
+                "total_cards": deck.total,
+            })
+
             # Day mode: rotate every 10 min | Night mode: every hour
             hr = time.localtime().tm_hour
-            wait = DAY_INTERVAL if DAY_START <= hr < DAY_END else NIGHT_INTERVAL
+            wait = config["day_interval"] if config["day_start"] <= hr < config["day_end"] else config["night_interval"]
             logger.info(f"Next card in {wait // 60} minutes")
-            time.sleep(wait)
+
+            # Poll during wait — picks up config changes and skip triggers
+            config, needs_reshuffle = wait_with_polling(wait)
+
+            # If TCG changed or collection settings changed, rebuild the deck
+            new_tcg = config["active_tcg"]
+            if new_tcg != active_tcg or needs_reshuffle:
+                active_tcg = new_tcg
+                library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+                master_index = load_master_index(library_dir)
+                collection = None
+                if config["collection_only"]:
+                    collection = load_collection(active_tcg)
+                    if not collection:
+                        collection = None
+                deck = ShuffleDeck(library_dir, collection)
 
             del final_img
             gc.collect()

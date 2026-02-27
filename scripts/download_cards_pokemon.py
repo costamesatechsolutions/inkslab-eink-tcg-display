@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-Download all Pokemon card images from the PokemonTCG GitHub data repository.
+Download all Pokemon card images and metadata from the PokemonTCG GitHub data repository.
 Supports resume - re-run safely to pick up where you left off.
 """
 
@@ -57,14 +57,27 @@ def main():
         print(f"Error fetching sets: {e}")
         return
 
+    # Build master_index.json
+    master_index = {}
+    for s in sets:
+        master_index[s['id']] = {
+            "name": s['name'],
+            "year": s['releaseDate'][:4]
+        }
+
+    index_path = os.path.join(BASE_DIR, "master_index.json")
+    with open(index_path, 'w') as f:
+        json.dump(master_index, f)
+    print(f"   Saved master_index.json ({len(master_index)} sets)")
+
     # Start with newest sets
     sets.reverse()
 
     total_sets = len(sets)
     download_count = 0
 
-    print(f"Found {total_sets} sets. Starting download...")
-    print("Press CTRL+C to stop (you can resume later).\n")
+    print(f"\n2. Downloading cards from {total_sets} sets...")
+    print("   Press CTRL+C to stop (you can resume later).\n")
 
     for i, s in enumerate(sets):
         set_id = s['id']
@@ -81,6 +94,21 @@ def main():
             print(f"  > Error fetching card list. Skipping.")
             continue
 
+        # Build _data.json for this set
+        slim_db = {}
+        for card in cards:
+            c_id = card['id']
+            slim_db[c_id] = {
+                "name": card.get('name', 'Unknown'),
+                "number": card.get('number', '00'),
+                "rarity": card.get('rarity', 'Common'),
+            }
+
+        data_file = os.path.join(set_dir, "_data.json")
+        with open(data_file, 'w') as f:
+            json.dump(slim_db, f)
+
+        # Download card images
         for card in cards:
             card_id = card['id']
             if 'images' not in card:
