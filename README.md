@@ -215,6 +215,8 @@ sudo systemctl start inkslab_web.service
 
 The dashboard is now live at **http://inkslab.local** — open it on your phone or computer.
 
+> **Tip:** If `inkslab.local` doesn't work in your browser, use the Pi's IP address instead (run `hostname -I` on the Pi to find it). The dashboard footer also shows the IP address. Some routers and Android devices don't support `.local` mDNS addresses.
+
 Check that both services are running:
 
 ```bash
@@ -228,10 +230,10 @@ Access the dashboard at `http://inkslab.local` from any device on your network.
 
 | Tab | Features |
 |-----|----------|
-| **Display** | See the current card, skip to next card, quick-switch between Pokemon and MTG |
+| **Display** | See the current card with preview image, skip to next card, quick-switch between Pokemon and MTG |
 | **Settings** | Change rotation interval, day/night hours, display rotation, color saturation, enable collection mode |
-| **Collection** | Browse all downloaded sets and cards, mark which cards you own, select/deselect entire sets |
-| **Downloads** | See storage stats, trigger new downloads for Pokemon or MTG, view live download progress |
+| **Collection** | Browse all downloaded sets and cards, preview card images, mark which cards you own, select/deselect entire sets |
+| **Downloads** | Storage stats, trigger/stop downloads for Pokemon or MTG, live download progress, delete card data |
 
 When **collection mode** is enabled in Settings, the display only cycles through cards you've marked as owned.
 

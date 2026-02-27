@@ -11,10 +11,12 @@ By Costa Mesa Tech Solutions (a brand of Pine Heights Ventures LLC)
 
 import os
 import json
+import shutil
+import signal
 import subprocess
 import time
 import threading
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 
 app = Flask(__name__)
 
@@ -45,6 +47,7 @@ DEFAULTS = {
 
 # Track running download process
 _download_proc = None
+_download_tcg = None
 _download_lock = threading.Lock()
 
 
@@ -81,6 +84,15 @@ def save_collection(data):
         json.dump(data, f)
 
 
+def get_local_ip():
+    try:
+        result = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=5)
+        ip = result.stdout.strip().split()[0]
+        return ip
+    except Exception:
+        return None
+
+
 # --- API ROUTES ---
 
 @app.route('/api/status')
@@ -104,7 +116,6 @@ def api_get_config():
 def api_set_config():
     config = load_config()
     updates = request.get_json(force=True)
-    # Only allow known keys
     for key in DEFAULTS:
         if key in updates:
             config[key] = updates[key]
@@ -122,6 +133,41 @@ def api_next():
         return jsonify({"ok": False, "error": str(e)})
 
 
+@app.route('/api/ip')
+def api_ip():
+    return jsonify({"ip": get_local_ip()})
+
+
+@app.route('/api/card_image')
+def api_current_card_image():
+    """Serve the current card image from the display status."""
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, 'r') as f:
+                status = json.load(f)
+            card_path = status.get("card_path")
+            if card_path and os.path.exists(card_path):
+                return send_file(card_path, mimetype='image/png')
+        except Exception:
+            pass
+    return '', 404
+
+
+@app.route('/api/card_image/<tcg>/<set_id>/<card_id>')
+def api_card_image(tcg, set_id, card_id):
+    """Serve a specific card image on demand."""
+    library = TCG_LIBRARIES.get(tcg)
+    if not library:
+        return '', 404
+    # Sanitize to prevent path traversal
+    safe_set = os.path.basename(set_id)
+    safe_card = os.path.basename(card_id)
+    card_path = os.path.join(library, safe_set, safe_card + '.png')
+    if os.path.exists(card_path):
+        return send_file(card_path, mimetype='image/png')
+    return '', 404
+
+
 @app.route('/api/sets')
 def api_sets():
     config = load_config()
@@ -130,7 +176,6 @@ def api_sets():
     if not library or not os.path.exists(library):
         return jsonify([])
 
-    # Load master index for set names
     master = {}
     index_path = os.path.join(library, "master_index.json")
     if os.path.exists(index_path):
@@ -140,7 +185,6 @@ def api_sets():
         except Exception:
             pass
 
-    # Load collection for owned counts
     collection = load_collection()
     owned_ids = set(collection.get(tcg, []))
 
@@ -149,12 +193,9 @@ def api_sets():
         set_path = os.path.join(library, d)
         if not os.path.isdir(set_path):
             continue
-
-        # Count cards
         cards = [f for f in os.listdir(set_path) if f.endswith('.png') and not f.startswith('_')]
         card_ids = [os.path.splitext(f)[0] for f in cards]
         owned_count = sum(1 for cid in card_ids if cid in owned_ids)
-
         info = master.get(d, {})
         sets.append({
             "id": d,
@@ -164,7 +205,6 @@ def api_sets():
             "owned_count": owned_count,
         })
 
-    # Sort by year descending
     sets.sort(key=lambda x: x["year"], reverse=True)
     return jsonify(sets)
 
@@ -181,7 +221,6 @@ def api_set_cards(set_id):
     if not os.path.isdir(set_path):
         return jsonify([])
 
-    # Load _data.json for metadata
     metadata = {}
     data_file = os.path.join(set_path, "_data.json")
     if os.path.exists(data_file):
@@ -191,7 +230,6 @@ def api_set_cards(set_id):
         except Exception:
             pass
 
-    # Load collection
     collection = load_collection()
     owned_ids = set(collection.get(tcg, []))
 
@@ -207,9 +245,9 @@ def api_set_cards(set_id):
             "number": info.get("number", "?"),
             "rarity": info.get("rarity", ""),
             "owned": card_id in owned_ids,
+            "set_id": set_id,
         })
 
-    # Sort by number
     cards.sort(key=lambda x: (x["number"].zfill(5) if x["number"].isdigit() else x["number"]))
     return jsonify(cards)
 
@@ -241,10 +279,9 @@ def api_collection_toggle():
 
 @app.route('/api/collection/toggle_set', methods=['POST'])
 def api_collection_toggle_set():
-    """Toggle all cards in a set on or off."""
     data = request.get_json(force=True)
     set_id = data.get("set_id")
-    owned = data.get("owned", True)  # True = select all, False = deselect all
+    owned = data.get("owned", True)
     if not set_id:
         return jsonify({"error": "set_id required"}), 400
 
@@ -258,7 +295,6 @@ def api_collection_toggle_set():
     if not os.path.isdir(set_path):
         return jsonify({"error": "set not found"}), 404
 
-    # Get all card IDs in the set
     card_ids = [os.path.splitext(f)[0] for f in os.listdir(set_path)
                 if f.endswith('.png') and not f.startswith('_')]
 
@@ -267,13 +303,11 @@ def api_collection_toggle_set():
         collection[tcg] = []
 
     if owned:
-        # Add all cards not already in collection
         existing = set(collection[tcg])
         for cid in card_ids:
             if cid not in existing:
                 collection[tcg].append(cid)
     else:
-        # Remove all cards in this set
         remove_set = set(card_ids)
         collection[tcg] = [cid for cid in collection[tcg] if cid not in remove_set]
 
@@ -293,7 +327,7 @@ def api_collection_clear():
 
 @app.route('/api/download/start', methods=['POST'])
 def api_download_start():
-    global _download_proc
+    global _download_proc, _download_tcg
 
     with _download_lock:
         if _download_proc and _download_proc.poll() is None:
@@ -312,46 +346,69 @@ def api_download_start():
         else:
             return jsonify({"ok": False, "error": "Unknown TCG"})
 
-        # Clear old log
         try:
             open(DOWNLOAD_LOG, 'w').close()
         except Exception:
             pass
 
         log_file = open(DOWNLOAD_LOG, 'w')
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
         _download_proc = subprocess.Popen(
             cmd, stdout=log_file, stderr=subprocess.STDOUT,
-            cwd=SCRIPT_DIR
+            cwd=SCRIPT_DIR, env=env
         )
+        _download_tcg = tcg
 
         return jsonify({"ok": True, "tcg": tcg, "pid": _download_proc.pid})
 
 
+@app.route('/api/download/stop', methods=['POST'])
+def api_download_stop():
+    global _download_proc, _download_tcg
+
+    with _download_lock:
+        if _download_proc and _download_proc.poll() is None:
+            try:
+                _download_proc.send_signal(signal.SIGTERM)
+                _download_proc.wait(timeout=5)
+            except Exception:
+                try:
+                    _download_proc.kill()
+                except Exception:
+                    pass
+            _download_proc = None
+            _download_tcg = None
+            return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "No download running"})
+
+
 @app.route('/api/download/status')
 def api_download_status():
-    global _download_proc
+    global _download_proc, _download_tcg
 
     running = False
+    tcg = _download_tcg
     with _download_lock:
         if _download_proc and _download_proc.poll() is None:
             running = True
+        else:
+            tcg = None
 
-    # Read last 20 lines of log
     lines = []
     if os.path.exists(DOWNLOAD_LOG):
         try:
             with open(DOWNLOAD_LOG, 'r') as f:
                 all_lines = f.readlines()
-                lines = [l.rstrip() for l in all_lines[-20:]]
+                lines = [l.rstrip() for l in all_lines[-30:]]
         except Exception:
             pass
 
-    return jsonify({"running": running, "lines": lines})
+    return jsonify({"running": running, "tcg": tcg, "lines": lines})
 
 
 @app.route('/api/storage')
 def api_storage():
-    """Get storage info for each TCG library."""
     info = {}
     for tcg, path in TCG_LIBRARIES.items():
         if os.path.exists(path):
@@ -377,6 +434,23 @@ def api_storage():
     return jsonify(info)
 
 
+@app.route('/api/delete', methods=['POST'])
+def api_delete():
+    data = request.get_json(force=True)
+    tcg = data.get("tcg")
+    if not tcg or tcg not in TCG_LIBRARIES:
+        return jsonify({"ok": False, "error": "Invalid TCG"}), 400
+
+    path = TCG_LIBRARIES[tcg]
+    if os.path.exists(path):
+        try:
+            shutil.rmtree(path)
+            return jsonify({"ok": True, "tcg": tcg})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+    return jsonify({"ok": True, "tcg": tcg})
+
+
 # --- DASHBOARD HTML ---
 
 DASHBOARD_HTML = """<!DOCTYPE html>
@@ -384,74 +458,96 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>InkSlab Dashboard</title>
+<title>InkSlab</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f0f; color: #e0e0e0; }
-.header { background: #1a1a2e; padding: 16px; text-align: center; border-bottom: 2px solid #e94560; }
-.header h1 { font-size: 20px; color: #fff; }
-.header small { color: #888; font-size: 11px; }
-.tabs { display: flex; background: #16213e; border-bottom: 1px solid #333; }
-.tab { flex: 1; padding: 12px 8px; text-align: center; cursor: pointer; color: #888; font-size: 13px; border-bottom: 2px solid transparent; transition: all 0.2s; }
-.tab.active { color: #e94560; border-bottom-color: #e94560; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #010001; color: #D8E6E4; min-height: 100vh; display: flex; flex-direction: column; }
+.header { background: #132E3E; padding: 18px 16px 14px; text-align: center; border-bottom: 2px solid #36A5CA; }
+.header h1 { font-size: 22px; color: #FCFDF0; letter-spacing: 1px; }
+.tabs { display: flex; background: #132E3E; border-bottom: 1px solid #1F333F; }
+.tab { flex: 1; padding: 12px 8px; text-align: center; cursor: pointer; color: #6BCCBD; font-size: 13px; border-bottom: 2px solid transparent; transition: all 0.2s; opacity: 0.6; }
+.tab.active { color: #36A5CA; border-bottom-color: #36A5CA; opacity: 1; }
+.content { flex: 1; }
 .panel { display: none; padding: 16px; }
 .panel.active { display: block; }
-.card { background: #1a1a2e; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
-.card h3 { color: #e94560; margin-bottom: 8px; font-size: 14px; }
-.stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #222; font-size: 14px; }
+.card { background: #16303E; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #1F333F; }
+.card h3 { color: #36A5CA; margin-bottom: 8px; font-size: 14px; }
+.stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1F333F; font-size: 14px; }
 .stat:last-child { border-bottom: none; }
-.stat-label { color: #888; }
+.stat-label { color: #6BCCBD; }
+.stat-value { color: #FCFDF0; }
 .btn { display: inline-block; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
-.btn-primary { background: #e94560; color: #fff; }
-.btn-primary:hover { background: #c73e54; }
-.btn-secondary { background: #333; color: #e0e0e0; }
-.btn-secondary:hover { background: #444; }
+.btn-primary { background: #36A5CA; color: #FCFDF0; }
+.btn-primary:hover { background: #2b8aaa; }
+.btn-secondary { background: #1F333F; color: #D8E6E4; border: 1px solid #36A5CA33; }
+.btn-secondary:hover { background: #263f4d; }
+.btn-danger { background: #8b2020; color: #FCFDF0; }
+.btn-danger:hover { background: #a52a2a; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-block { display: block; width: 100%; text-align: center; }
-select, input[type=number], input[type=range] { background: #222; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 14px; width: 100%; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px solid #36A5CA44; border-radius: 4px; padding: 8px; font-size: 14px; width: 100%; }
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; color: #888; font-size: 12px; margin-bottom: 4px; }
+.form-group label { display: block; color: #6BCCBD; font-size: 12px; margin-bottom: 4px; }
 .toggle { display: flex; align-items: center; gap: 8px; }
-.toggle input[type=checkbox] { width: 18px; height: 18px; }
-.set-item { background: #1a1a2e; border-radius: 6px; margin-bottom: 4px; overflow: hidden; }
+.toggle input[type=checkbox] { width: 18px; height: 18px; accent-color: #36A5CA; }
+.set-item { background: #16303E; border-radius: 6px; margin-bottom: 4px; overflow: hidden; border: 1px solid #1F333F; }
 .set-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; cursor: pointer; }
-.set-header:hover { background: #222; }
-.set-name { font-size: 13px; font-weight: 600; }
-.set-meta { font-size: 11px; color: #888; }
+.set-header:hover { background: #1F333F; }
+.set-name { font-size: 13px; font-weight: 600; color: #FCFDF0; }
+.set-meta { font-size: 11px; color: #6BCCBD; }
 .set-cards { display: none; padding: 0 12px 8px; }
 .set-cards.open { display: block; }
-.card-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #1a1a1a; font-size: 12px; }
-.card-row label { flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-.card-rarity { color: #888; font-size: 11px; }
-.log-box { background: #111; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: #aaa; }
-.badge { display: inline-block; background: #e94560; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 10px; margin-left: 4px; }
+.card-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #132E3E; font-size: 12px; }
+.card-row label { flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; color: #D8E6E4; }
+.card-row input[type=checkbox] { accent-color: #36A5CA; }
+.card-rarity { color: #6BCCBD; font-size: 11px; }
+.card-preview-btn { cursor: pointer; color: #36A5CA; font-size: 11px; margin-left: 6px; text-decoration: underline; }
+.log-box { background: #0a1a22; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: #6BCCBD; border: 1px solid #1F333F; }
+.badge { display: inline-block; background: #6BCCBD; color: #010001; border-radius: 10px; padding: 1px 7px; font-size: 10px; margin-left: 4px; font-weight: 700; }
 .flex-row { display: flex; gap: 8px; }
 .flex-row > * { flex: 1; }
+.preview-img { display: block; margin: 12px auto 0; max-width: 150px; border-radius: 6px; border: 2px solid #1F333F; }
+.footer { background: #132E3E; padding: 14px 16px; text-align: center; font-size: 10px; color: #1F333F; border-top: 1px solid #1F333F; margin-top: auto; }
+.footer a { color: #36A5CA55; text-decoration: none; }
+.footer .ip { color: #6BCCBD88; margin-top: 4px; }
+
+/* Modal overlay */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(1,0,1,0.85); z-index: 100; justify-content: center; align-items: center; }
+.modal-overlay.open { display: flex; }
+.modal-content { text-align: center; padding: 16px; max-width: 300px; }
+.modal-content img { max-width: 260px; border-radius: 8px; border: 2px solid #36A5CA; }
+.modal-content p { margin-top: 8px; color: #FCFDF0; font-size: 13px; }
+.modal-close { margin-top: 12px; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>InkSlab</h1>
-  <small>Costa Mesa Tech Solutions</small>
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="showTab('display')">Display</div>
-  <div class="tab" onclick="showTab('settings')">Settings</div>
-  <div class="tab" onclick="showTab('collection')">Collection</div>
-  <div class="tab" onclick="showTab('downloads')">Downloads</div>
+  <div class="tab active" data-tab="display" onclick="showTab('display')">Display</div>
+  <div class="tab" data-tab="settings" onclick="showTab('settings')">Settings</div>
+  <div class="tab" data-tab="collection" onclick="showTab('collection')">Collection</div>
+  <div class="tab" data-tab="downloads" onclick="showTab('downloads')">Downloads</div>
 </div>
+
+<div class="content">
 
 <!-- DISPLAY TAB -->
 <div id="tab-display" class="panel active">
   <div class="card">
     <h3>Now Showing</h3>
-    <div class="stat"><span class="stat-label">Card</span><span id="st-card">—</span></div>
-    <div class="stat"><span class="stat-label">Set</span><span id="st-set">—</span></div>
-    <div class="stat"><span class="stat-label">Rarity</span><span id="st-rarity">—</span></div>
-    <div class="stat"><span class="stat-label">TCG</span><span id="st-tcg">—</span></div>
-    <div class="stat"><span class="stat-label">Cards in Deck</span><span id="st-total">—</span></div>
+    <img id="st-preview" class="preview-img" src="/api/card_image" onerror="this.style.display='none'" onload="this.style.display='block'">
+    <div style="margin-top:12px">
+      <div class="stat"><span class="stat-label">Card</span><span class="stat-value" id="st-card">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">Set</span><span class="stat-value" id="st-set">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">Rarity</span><span class="stat-value" id="st-rarity">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">TCG</span><span class="stat-value" id="st-tcg">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">Cards in Deck</span><span class="stat-value" id="st-total">&mdash;</span></div>
+    </div>
   </div>
   <div class="flex-row" style="margin-bottom:12px">
     <button class="btn btn-primary btn-block" onclick="nextCard()">Next Card</button>
@@ -511,7 +607,7 @@ select, input[type=number], input[type=range] { background: #222; color: #e0e0e0
 <div id="tab-collection" class="panel">
   <div class="card">
     <h3>My Collection</h3>
-    <p style="color:#888;font-size:12px;margin-bottom:8px">Mark the cards you own. Enable "collection mode" in Settings to only display owned cards.</p>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Mark the cards you own. Enable "collection mode" in Settings to only display owned cards. Tap a card name to preview it.</p>
     <button class="btn btn-secondary btn-sm" onclick="clearCollection()">Clear All</button>
   </div>
   <div id="sets-list"></div>
@@ -525,34 +621,61 @@ select, input[type=number], input[type=range] { background: #222; color: #e0e0e0
   </div>
   <div class="card">
     <h3>Download Cards</h3>
-    <div class="flex-row" style="margin-bottom:8px">
-      <button class="btn btn-primary btn-block" onclick="startDownload('pokemon')">Download Pokemon</button>
-    </div>
-    <div class="flex-row" style="margin-bottom:8px">
-      <button class="btn btn-primary btn-block" onclick="startDownload('mtg')">Download MTG (All)</button>
-    </div>
-    <div class="form-group">
-      <label>Or download MTG since year:</label>
-      <div class="flex-row">
-        <input type="number" id="dl-since" min="1993" max="2030" value="2020" style="flex:2">
-        <button class="btn btn-secondary" onclick="startDownload('mtg', document.getElementById('dl-since').value)" style="flex:1">Go</button>
+    <div id="dl-buttons">
+      <div class="flex-row" style="margin-bottom:8px">
+        <button class="btn btn-primary btn-block" id="btn-dl-pokemon" onclick="startDownload('pokemon')">Download Pokemon</button>
+      </div>
+      <div class="flex-row" style="margin-bottom:8px">
+        <button class="btn btn-primary btn-block" id="btn-dl-mtg" onclick="startDownload('mtg')">Download MTG (All)</button>
+      </div>
+      <div class="form-group">
+        <label>Or download MTG since year:</label>
+        <div class="flex-row">
+          <input type="number" id="dl-since" min="1993" max="2030" value="2020" style="flex:2">
+          <button class="btn btn-secondary" id="btn-dl-mtg-since" onclick="startDownload('mtg', document.getElementById('dl-since').value)" style="flex:1">Go</button>
+        </div>
       </div>
     </div>
+    <button class="btn btn-danger btn-block" id="btn-dl-stop" style="display:none" onclick="stopDownload()">Stop Download</button>
   </div>
   <div class="card">
     <h3>Download Log</h3>
-    <div id="dl-status" style="font-size:12px;margin-bottom:8px;color:#888">Idle</div>
+    <div id="dl-status" style="font-size:12px;margin-bottom:8px;color:#6BCCBD">Idle</div>
     <div id="dl-log" class="log-box">No download running.</div>
   </div>
+  <div class="card">
+    <h3>Delete Data</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Remove all downloaded card images for a TCG.</p>
+    <div class="flex-row">
+      <button class="btn btn-danger btn-block btn-sm" onclick="deleteData('pokemon')">Delete Pokemon</button>
+      <button class="btn btn-danger btn-block btn-sm" onclick="deleteData('mtg')">Delete MTG</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- Card preview modal -->
+<div class="modal-overlay" id="preview-modal" onclick="closePreview()">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <img id="preview-img" src="">
+    <p id="preview-name"></p>
+    <button class="btn btn-secondary btn-sm modal-close" onclick="closePreview()">Close</button>
+  </div>
+</div>
+
+<div class="footer">
+  <div>Costa Mesa Tech Solutions &mdash; a brand of Pine Heights Ventures LLC</div>
+  <div class="ip" id="footer-ip"></div>
 </div>
 
 <script>
 const API = '';
 
+// --- Tab persistence ---
 function showTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', t.textContent.toLowerCase().includes(name.slice(0,4)));
-  });
+  localStorage.setItem('inkslab_tab', name);
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'collection') loadSets();
@@ -564,11 +687,14 @@ function showTab(name) {
 // --- Display ---
 function refreshStatus() {
   fetch(API + '/api/status').then(r => r.json()).then(d => {
-    document.getElementById('st-card').textContent = d.card_num || '—';
-    document.getElementById('st-set').textContent = d.set_info || '—';
-    document.getElementById('st-rarity').textContent = d.rarity || '—';
-    document.getElementById('st-tcg').textContent = (d.tcg || '—').toUpperCase();
-    document.getElementById('st-total').textContent = d.total_cards || '—';
+    document.getElementById('st-card').textContent = d.card_num || '\\u2014';
+    document.getElementById('st-set').textContent = d.set_info || '\\u2014';
+    document.getElementById('st-rarity').textContent = d.rarity || '\\u2014';
+    document.getElementById('st-tcg').textContent = (d.tcg || '\\u2014').toUpperCase();
+    document.getElementById('st-total').textContent = d.total_cards || '\\u2014';
+    // Refresh preview image with cache buster
+    const img = document.getElementById('st-preview');
+    img.src = '/api/card_image?t=' + Date.now();
   }).catch(() => {});
 }
 
@@ -580,7 +706,7 @@ function nextCard() {
 
 function switchTCG(tcg) {
   fetch(API + '/api/config', {method:'POST', body: JSON.stringify({active_tcg: tcg})})
-    .then(() => refreshStatus());
+    .then(() => setTimeout(refreshStatus, 2000));
 }
 
 // --- Settings ---
@@ -615,15 +741,15 @@ function saveSettings() {
 // --- Collection ---
 function loadSets() {
   const el = document.getElementById('sets-list');
-  el.innerHTML = '<div style="color:#888;padding:16px;text-align:center">Loading sets...</div>';
+  el.innerHTML = '<div style="color:#6BCCBD;padding:16px;text-align:center">Loading sets...</div>';
   fetch(API + '/api/sets').then(r => r.json()).then(sets => {
-    if (!sets.length) { el.innerHTML = '<div style="color:#888;padding:16px;text-align:center">No cards downloaded yet.</div>'; return; }
+    if (!sets.length) { el.innerHTML = '<div style="color:#6BCCBD;padding:16px;text-align:center">No cards downloaded yet.</div>'; return; }
     el.innerHTML = sets.map(s => `
       <div class="set-item">
-        <div class="set-header" onclick="toggleSet('${s.id}', this)">
+        <div class="set-header" onclick="toggleSet('${s.id}')">
           <span>
             <span class="set-name">${s.name}</span>
-            ${s.owned_count > 0 ? '<span class=\\'badge\\'>' + s.owned_count + '</span>' : ''}
+            ${s.owned_count > 0 ? '<span class="badge">' + s.owned_count + '</span>' : ''}
           </span>
           <span class="set-meta">${s.year} &middot; ${s.card_count} cards</span>
         </div>
@@ -633,24 +759,24 @@ function loadSets() {
   });
 }
 
-function toggleSet(setId, headerEl) {
+function toggleSet(setId) {
   const el = document.getElementById('set-' + setId);
-  if (el.classList.contains('open')) {
-    el.classList.remove('open');
-    return;
-  }
+  if (el.classList.contains('open')) { el.classList.remove('open'); return; }
   el.classList.add('open');
   if (el.dataset.loaded) return;
-  el.innerHTML = '<div style="padding:8px;color:#888;font-size:12px">Loading...</div>';
+  el.innerHTML = '<div style="padding:8px;color:#6BCCBD;font-size:12px">Loading...</div>';
   fetch(API + '/api/sets/' + setId + '/cards').then(r => r.json()).then(cards => {
     el.dataset.loaded = '1';
     let html = '<div style="padding:4px 0 6px;display:flex;gap:4px">';
-    html += '<button class="btn btn-secondary btn-sm" onclick="toggleSetAll(\\'' + setId + '\\',true)">Select All</button>';
-    html += '<button class="btn btn-secondary btn-sm" onclick="toggleSetAll(\\'' + setId + '\\',false)">Deselect All</button>';
+    html += `<button class="btn btn-secondary btn-sm" onclick="toggleSetAll('${setId}',true)">Select All</button>`;
+    html += `<button class="btn btn-secondary btn-sm" onclick="toggleSetAll('${setId}',false)">Deselect All</button>`;
     html += '</div>';
     html += cards.map(c => `
       <div class="card-row">
-        <label><input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleCard('${c.id}', this)"> #${c.number} ${c.name}</label>
+        <label>
+          <input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleCard('${c.id}')">
+          <span class="card-preview-btn" onclick="event.preventDefault();showPreview('${c.set_id}','${c.id}','${c.name.replace(/'/g,"\\\\'")} #${c.number}')">#${c.number} ${c.name}</span>
+        </label>
         <span class="card-rarity">${c.rarity}</span>
       </div>
     `).join('');
@@ -675,14 +801,39 @@ function clearCollection() {
   fetch(API + '/api/collection/clear', {method:'POST'}).then(() => loadSets());
 }
 
+// --- Card preview modal ---
+function showPreview(setId, cardId, label) {
+  fetch(API + '/api/config').then(r => r.json()).then(cfg => {
+    document.getElementById('preview-img').src = '/api/card_image/' + cfg.active_tcg + '/' + setId + '/' + cardId;
+    document.getElementById('preview-name').textContent = label;
+    document.getElementById('preview-modal').classList.add('open');
+  });
+}
+function closePreview() {
+  document.getElementById('preview-modal').classList.remove('open');
+}
+
 // --- Downloads ---
 function loadStorage() {
   fetch(API + '/api/storage').then(r => r.json()).then(info => {
     const el = document.getElementById('storage-info');
     el.innerHTML = Object.entries(info).map(([tcg, d]) =>
-      `<div class="stat"><span class="stat-label">${tcg.toUpperCase()}</span><span>${d.card_count} cards (${d.set_count} sets, ${d.size_mb} MB)</span></div>`
+      `<div class="stat"><span class="stat-label">${tcg.toUpperCase()}</span><span class="stat-value">${d.card_count} cards (${d.set_count} sets, ${d.size_mb} MB)</span></div>`
     ).join('');
   });
+}
+
+function setDownloadUI(running, tcg) {
+  const btns = document.getElementById('dl-buttons');
+  const stopBtn = document.getElementById('btn-dl-stop');
+  if (running) {
+    btns.querySelectorAll('.btn').forEach(b => b.disabled = true);
+    stopBtn.style.display = 'block';
+    stopBtn.textContent = 'Stop ' + (tcg || '').toUpperCase() + ' Download';
+  } else {
+    btns.querySelectorAll('.btn').forEach(b => b.disabled = false);
+    stopBtn.style.display = 'none';
+  }
 }
 
 function startDownload(tcg, since) {
@@ -691,7 +842,8 @@ function startDownload(tcg, since) {
   fetch(API + '/api/download/start', {method:'POST', body: JSON.stringify(body)})
     .then(r => r.json()).then(d => {
       if (d.ok) {
-        document.getElementById('dl-status').textContent = 'Downloading ' + tcg + '...';
+        document.getElementById('dl-status').textContent = 'Downloading ' + tcg.toUpperCase() + '...';
+        setDownloadUI(true, tcg);
         pollDownload();
       } else {
         alert(d.error || 'Failed to start download');
@@ -699,23 +851,61 @@ function startDownload(tcg, since) {
     });
 }
 
+function stopDownload() {
+  fetch(API + '/api/download/stop', {method:'POST'}).then(r => r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('dl-status').textContent = 'Download stopped.';
+      setDownloadUI(false);
+      loadStorage();
+    }
+  });
+}
+
 let _dlPoll = null;
 function pollDownload() {
   if (_dlPoll) clearInterval(_dlPoll);
-  _dlPoll = setInterval(() => {
-    fetch(API + '/api/download/status').then(r => r.json()).then(d => {
-      const logEl = document.getElementById('dl-log');
-      logEl.textContent = d.lines.join('\\n') || 'No output yet.';
-      logEl.scrollTop = logEl.scrollHeight;
-      document.getElementById('dl-status').textContent = d.running ? 'Downloading...' : 'Idle';
-      if (!d.running && _dlPoll) { clearInterval(_dlPoll); _dlPoll = null; loadStorage(); }
+  checkDownload();
+  _dlPoll = setInterval(checkDownload, 2000);
+}
+function checkDownload() {
+  fetch(API + '/api/download/status').then(r => r.json()).then(d => {
+    const logEl = document.getElementById('dl-log');
+    logEl.textContent = d.lines.join('\\n') || 'No output yet.';
+    logEl.scrollTop = logEl.scrollHeight;
+    if (d.running) {
+      document.getElementById('dl-status').textContent = 'Downloading ' + (d.tcg || '').toUpperCase() + '...';
+      setDownloadUI(true, d.tcg);
+    } else {
+      document.getElementById('dl-status').textContent = 'Idle';
+      setDownloadUI(false);
+      if (_dlPoll) { clearInterval(_dlPoll); _dlPoll = null; loadStorage(); }
+    }
+  });
+}
+
+function deleteData(tcg) {
+  if (!confirm('Delete ALL ' + tcg.toUpperCase() + ' card images? This cannot be undone.')) return;
+  fetch(API + '/api/delete', {method:'POST', body: JSON.stringify({tcg: tcg})})
+    .then(r => r.json()).then(d => {
+      if (d.ok) loadStorage();
+      else alert(d.error || 'Delete failed');
     });
-  }, 3000);
 }
 
 // --- Init ---
-refreshStatus();
-setInterval(refreshStatus, 30000);
+(function() {
+  const saved = localStorage.getItem('inkslab_tab');
+  if (saved && document.getElementById('tab-' + saved)) {
+    showTab(saved);
+  } else {
+    refreshStatus();
+  }
+  setInterval(refreshStatus, 30000);
+  // Load IP for footer
+  fetch(API + '/api/ip').then(r => r.json()).then(d => {
+    if (d.ip) document.getElementById('footer-ip').textContent = 'Also available at http://' + d.ip;
+  }).catch(() => {});
+})();
 </script>
 </body>
 </html>"""
