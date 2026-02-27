@@ -544,7 +544,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .badge { display: inline-block; background: #6BCCBD; color: #010001; border-radius: 10px; padding: 1px 7px; font-size: 10px; margin-left: 4px; font-weight: 700; }
 .flex-row { display: flex; gap: 8px; }
 .flex-row > * { flex: 1; }
-.preview-img { display: block; margin: 12px auto 0; max-width: 150px; border-radius: 6px; border: 2px solid #1F333F; }
+.preview-img { display: block; max-width: 150px; border-radius: 6px; border: 2px solid #1F333F; width: 100%; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.preview-spin { animation: spin 1.2s linear infinite; display: inline-block; }
 .footer { background: #132E3E; padding: 14px 16px; text-align: center; font-size: 10px; color: #1F333F; border-top: 1px solid #1F333F; margin-top: auto; }
 .footer a { color: #36A5CA55; text-decoration: none; }
 .footer .ip { color: #6BCCBD88; margin-top: 4px; }
@@ -577,7 +579,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <div id="tab-display" class="panel active">
   <div class="card">
     <h3>Now Showing</h3>
-    <img id="st-preview" class="preview-img" src="/api/card_image" onerror="this.style.display='none'" onload="this.style.display='block'">
+    <div id="st-preview-wrap" style="position:relative;max-width:150px;margin:12px auto 0">
+      <img id="st-preview" class="preview-img" style="margin:0" src="/api/card_image" onerror="this.style.display='none'" onload="this.style.display='block'">
+      <div id="st-preview-loading" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(22,48,62,0.9);border-radius:6px;border:2px solid #36A5CA;flex-direction:column;justify-content:center;align-items:center;color:#36A5CA;font-size:12px;font-weight:600">
+        <div style="font-size:24px;margin-bottom:6px">&#8635;</div>
+        <div id="st-preview-loading-text">Loading...</div>
+      </div>
+    </div>
     <div style="margin-top:12px">
       <div class="stat"><span class="stat-label">Card</span><span class="stat-value" id="st-card">&mdash;</span></div>
       <div class="stat"><span class="stat-label">Set</span><span class="stat-value" id="st-set">&mdash;</span></div>
@@ -743,6 +751,17 @@ var _lastStatus = {};
 var _rapidPoll = null;
 var _pendingAction = false;
 
+function showPreviewLoading(msg) {
+  var overlay = document.getElementById('st-preview-loading');
+  document.getElementById('st-preview-loading-text').textContent = msg || 'Loading...';
+  overlay.style.display = 'flex';
+  overlay.querySelector('div').className = 'preview-spin';
+}
+function hidePreviewLoading() {
+  var overlay = document.getElementById('st-preview-loading');
+  overlay.style.display = 'none';
+}
+
 function refreshStatus() {
   fetch(API + '/api/status').then(r => r.json()).then(d => {
     document.getElementById('st-tcg').textContent = (d.tcg || '\\u2014').toUpperCase();
@@ -774,9 +793,15 @@ function refreshStatus() {
       if (d.card_path) {
         if (d.card_path !== _lastStatus.card_path) {
           img.src = '/api/card_image?t=' + Date.now();
+          hidePreviewLoading();
         }
       } else {
         img.style.display = 'none';
+        hidePreviewLoading();
+      }
+      // Clear loading overlay if no longer pending
+      if (_lastStatus.pending && !d.pending) {
+        hidePreviewLoading();
       }
     }
     // Stop rapid polling once daemon has processed (pending cleared and new card)
@@ -809,7 +834,8 @@ function nextCard(btn) {
       btn.textContent = orig;
       btn.disabled = false;
       showToast('Updating display...');
-      // Optimistic: show pending state in UI immediately
+      // Optimistic: show loading state immediately on the preview image
+      showPreviewLoading('Loading next card...');
       document.getElementById('st-card').textContent = '\\u2014';
       document.getElementById('st-set').textContent = '\\u2014';
       document.getElementById('st-rarity').textContent = '\\u2014';
@@ -840,7 +866,8 @@ function switchTCG(tcg, activeBtn) {
       activeBtn.textContent = orig;
       btns.forEach(function(b) { b.disabled = false; });
       showToast('Switching to ' + tcg.toUpperCase() + '...');
-      // Optimistic: update TCG label and show pending state immediately
+      // Optimistic: update TCG label and show loading on image immediately
+      showPreviewLoading('Switching to ' + tcg.toUpperCase() + '...');
       document.getElementById('st-tcg').textContent = tcg.toUpperCase();
       document.getElementById('st-card').textContent = '\\u2014';
       document.getElementById('st-set').textContent = '\\u2014';
