@@ -1,6 +1,8 @@
 # InkSlab — e-Ink TCG Card Display
 
-A Raspberry Pi + e-ink display that cycles through every TCG card ever printed in a graded-slab-style layout — showing the set name, year, card number, and rarity on a 7-color Waveshare Spectra 6 screen.
+A Raspberry Pi + e-ink display that cycles through TCG cards in a graded-slab-style layout — showing the set name, year, card number, and rarity on a 7-color Waveshare Spectra 6 screen.
+
+**Supports Pokemon and Magic: The Gathering.**
 
 Cards rotate every **10 minutes** during the day and every **hour** at night to preserve the display.
 
@@ -11,7 +13,7 @@ Cards rotate every **10 minutes** during the day and every **hour** at night to 
 ### Electronics
 - **Raspberry Pi Zero W H** (the H means headers are pre-soldered — required for the HAT)
 - **[Waveshare 4" e-Paper HAT+ (E)](https://www.waveshare.com/wiki/4inch_e-Paper_HAT%2B_(E)_Manual)** — Spectra 6-color model (black, white, red, yellow, blue, green, orange)
-- **Micro SD card** (16GB minimum, 32GB+ recommended — card images take ~12GB)
+- **Micro SD card** (32GB for one TCG, 64GB if running both — Pokemon takes ~12GB, MTG takes ~18GB)
 - **90-degree micro USB cable** (recommended) — keeps the power cable hidden behind the frame instead of sticking out the side
 
 ### 3D Printed Frame
@@ -27,10 +29,10 @@ The frame holds the Pi and e-paper screen in a clean, desk-friendly package. Jus
 
 ## How It Works
 
-1. `scripts/download_cards.py` downloads card images from the [PokemonTCG open data repo](https://github.com/PokemonTCG/pokemon-tcg-data)
-2. `scripts/update_metadata.py` fetches set names, card numbers, and rarities
-3. `inkslab.py` shuffles all cards into a "deck", processes each image for the 7-color e-paper palette (Floyd-Steinberg dithering), and displays them in a loop
-4. A systemd service keeps it running as a daemon on boot
+1. A download script fetches card images and metadata from an open data source (PokemonTCG GitHub repo or Scryfall for MTG)
+2. `inkslab.py` shuffles all cards into a "deck", processes each image for the 7-color e-paper palette (Floyd-Steinberg dithering), and displays them in a loop
+3. A systemd service keeps it running as a daemon on boot
+4. Change `ACTIVE_TCG` in `inkslab.py` to switch between Pokemon and MTG
 
 ## Display Layout
 
@@ -135,25 +137,31 @@ cd inkslab-eink-tcg-display
 
 ### 6. Download Card Images
 
-Downloads every card image (~15,000+ cards, ~12GB). This takes a while on a Pi Zero. Supports resume — you can stop and restart safely.
-
 Use a `screen` session so the download survives if your SSH connection drops:
 
 ```bash
 sudo apt install screen
-```
-
-Start a new screen session:
-
-```bash
 screen -S downloader
 ```
 
-You're now inside the screen session. Run the download:
+**For Pokemon** (~15,000+ cards, ~12GB):
 
 ```bash
 cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
-python3 scripts/download_cards.py
+python3 scripts/download_cards_pokemon.py
+```
+
+**For MTG** (~90,000+ cards, ~18GB):
+
+```bash
+cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
+python3 scripts/download_cards_mtg.py
+```
+
+To save space, you can limit MTG to recent sets:
+
+```bash
+python3 scripts/download_cards_mtg.py --since 2018
 ```
 
 To **detach** from screen (download keeps running in the background): press `Ctrl+A`, then press `D`.
@@ -164,16 +172,24 @@ To **re-attach** later and check progress:
 screen -r downloader
 ```
 
-### 7. Build Metadata
+### 7. Build Metadata (Pokemon only)
+
+MTG metadata is built automatically by the download script. For Pokemon, run the metadata script separately:
 
 ```bash
 cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
-python3 scripts/update_metadata.py
+python3 scripts/update_metadata_pokemon.py
 ```
 
-This creates `master_index.json` (set names/years) and `_data.json` in each set folder (card names, numbers, and rarities).
+### 8. Choose Your TCG
 
-### 8. Test It
+Edit the top of `inkslab.py` and set `ACTIVE_TCG` to whichever game you want to display:
+
+```python
+ACTIVE_TCG = "pokemon"  # "pokemon" or "mtg"
+```
+
+### 9. Test It
 
 ```bash
 cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
@@ -182,7 +198,7 @@ python3 inkslab.py
 
 You should see a random card appear on the display within ~30 seconds.
 
-### 9. Run on Boot (Daemon)
+### 10. Run on Boot (Daemon)
 
 ```bash
 sudo cp inkslab.service /etc/systemd/system/inkslab.service
@@ -209,28 +225,17 @@ sudo systemctl restart inkslab.service
 
 ```
 inkslab-eink-tcg-display/
-├── inkslab.py               # Main display script (runs as daemon)
-├── inkslab.service           # systemd service file
-├── requirements.txt          # Python dependencies
+├── inkslab.py                      # Main display script (runs as daemon)
+├── inkslab.service                  # systemd service file
+├── requirements.txt                 # Python dependencies
 ├── lib/
-│   └── waveshare_epd/       # e-Paper display driver (bundled)
-│       ├── epd4in0e.py       # 4" Spectra 6 driver
-│       └── epdconfig.py      # Hardware config (SPI/GPIO)
+│   └── waveshare_epd/              # e-Paper display driver (bundled)
+│       ├── epd4in0e.py              # 4" Spectra 6 driver
+│       └── epdconfig.py             # Hardware config (SPI/GPIO)
 └── scripts/
-    ├── download_cards.py     # Download all card images
-    └── update_metadata.py    # Fetch set names, numbers, rarities
-```
-
-Card images are stored at `/home/pi/pokemon_cards/` (not in the repo — too large):
-```
-pokemon_cards/
-├── master_index.json         # Set ID -> name + year lookup
-├── base1/                    # Base Set (1999)
-│   ├── _data.json            # Card metadata
-│   ├── base1-1.png
-│   └── ...
-├── sv9/                      # Journey Together (2025)
-└── ...                       # 150+ sets
+    ├── download_cards_pokemon.py    # Download Pokemon card images
+    ├── update_metadata_pokemon.py   # Fetch Pokemon set names, numbers, rarities
+    └── download_cards_mtg.py        # Download MTG card images + metadata (Scryfall)
 ```
 
 ## Configuration
@@ -239,7 +244,7 @@ Edit the top of `inkslab.py` to customize:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `LIBRARY_DIR` | `/home/pi/pokemon_cards` | Path to card images |
+| `ACTIVE_TCG` | `"pokemon"` | Which TCG to display (`"pokemon"` or `"mtg"`) |
 | `ROTATION_ANGLE` | `270` | Display rotation (0/90/180/270) |
 | `DAY_INTERVAL` | `600` (10 min) | Seconds between cards during the day |
 | `NIGHT_INTERVAL` | `3600` (1 hr) | Seconds between cards at night |
@@ -248,15 +253,22 @@ Edit the top of `inkslab.py` to customize:
 
 ## Adding New Sets
 
-When new sets release, re-run both scripts to download the new cards and update metadata:
+When new sets release, re-run the download script for your TCG:
 
+**Pokemon:**
 ```bash
 cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
-python3 scripts/download_cards.py
-python3 scripts/update_metadata.py
+python3 scripts/download_cards_pokemon.py
+python3 scripts/update_metadata_pokemon.py
 ```
 
-Then restart the service so it picks up the new cards:
+**MTG:**
+```bash
+cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
+python3 scripts/download_cards_mtg.py
+```
+
+Then restart the service:
 
 ```bash
 sudo systemctl restart inkslab.service
@@ -274,7 +286,8 @@ sudo systemctl restart inkslab.service
 
 ## Credits
 
-- Card data: [PokemonTCG/pokemon-tcg-data](https://github.com/PokemonTCG/pokemon-tcg-data) (open data)
+- Pokemon card data: [PokemonTCG/pokemon-tcg-data](https://github.com/PokemonTCG/pokemon-tcg-data) (open data)
+- MTG card data: [Scryfall](https://scryfall.com/) (free API)
 - Display driver: [Waveshare e-Paper](https://github.com/waveshare/e-Paper) (MIT License)
 
 ## License

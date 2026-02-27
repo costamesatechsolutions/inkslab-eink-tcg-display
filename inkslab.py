@@ -21,7 +21,14 @@ import logging
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
 
 # --- CONFIGURATION ---
-LIBRARY_DIR = "/home/pi/pokemon_cards"
+ACTIVE_TCG = "pokemon"  # "pokemon" or "mtg"
+
+TCG_LIBRARIES = {
+    "pokemon": "/home/pi/pokemon_cards",
+    "mtg": "/home/pi/mtg_cards",
+}
+
+LIBRARY_DIR = TCG_LIBRARIES[ACTIVE_TCG]
 INDEX_FILE = os.path.join(LIBRARY_DIR, "master_index.json")
 ROTATION_ANGLE = 270  # Rotate for display orientation
 
