@@ -272,15 +272,27 @@ class ShuffleDeck:
     def reshuffle(self):
         logger.info("Shuffling deck...")
         temp = []
-        for root, dirs, files in os.walk(self.root_dir):
-            for f in files:
-                if f.endswith(".png") and not f.startswith("_"):
-                    # If collection mode, only include owned cards
-                    if self.collection:
-                        card_id = os.path.splitext(f)[0]
-                        if card_id not in self.collection:
-                            continue
-                    temp.append(os.path.join(root, f))
+        if os.path.isdir(self.root_dir):
+            for root, dirs, files in os.walk(self.root_dir):
+                for f in files:
+                    if f.endswith(".png") and not f.startswith("_"):
+                        # If collection mode, only include owned cards
+                        if self.collection:
+                            card_id = os.path.splitext(f)[0]
+                            if card_id not in self.collection:
+                                continue
+                        temp.append(os.path.join(root, f))
+
+        # Auto-fallback: if collection mode found 0 matching cards, show all
+        if self.collection is not None and len(temp) == 0:
+            logger.warning("Collection mode active but no matching cards on disk — showing all cards")
+            self.collection = None
+            if os.path.isdir(self.root_dir):
+                for root, dirs, files in os.walk(self.root_dir):
+                    for f in files:
+                        if f.endswith(".png") and not f.startswith("_"):
+                            temp.append(os.path.join(root, f))
+
         random.shuffle(temp)
         self.deck = temp
         self.total = len(temp)
@@ -344,9 +356,36 @@ def main():
 
     deck = ShuffleDeck(library_dir, collection)
 
-    if deck.total == 0:
-        logger.error(f"No cards found in {library_dir}")
-        return
+    # If no cards available, wait and poll for config changes or new downloads
+    while deck.total == 0:
+        logger.warning(f"No cards found for {active_tcg} in {library_dir}. "
+                       f"Waiting for cards to be downloaded or TCG to be changed...")
+        write_status({
+            "card_path": "",
+            "set_name": "",
+            "set_info": f"No {active_tcg.upper()} cards downloaded",
+            "card_num": "",
+            "rarity": "",
+            "timestamp": int(time.time()),
+            "tcg": active_tcg,
+            "total_cards": 0,
+            "error": f"No {active_tcg.upper()} cards found. Download cards from the web dashboard.",
+        })
+        config, _ = wait_with_polling(60)
+        new_tcg = config["active_tcg"]
+        if new_tcg != active_tcg:
+            active_tcg = new_tcg
+            library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+            master_index = load_master_index(library_dir)
+            collection = None
+            if config["collection_only"]:
+                collection = load_collection(active_tcg)
+                if not collection:
+                    collection = None
+            deck = ShuffleDeck(library_dir, collection)
+        else:
+            # Same TCG — reshuffle in case cards were just downloaded
+            deck.reshuffle()
 
     try:
         epd = epd4in0e.EPD()
@@ -360,9 +399,33 @@ def main():
     while True:
         card_path = deck.draw()
         if not card_path:
-            logger.warning("No cards available. Waiting 60s...")
-            time.sleep(60)
-            config = load_config()
+            logger.warning(f"No cards available for {active_tcg}. Checking for changes...")
+            write_status({
+                "card_path": "",
+                "set_name": "",
+                "set_info": f"No {active_tcg.upper()} cards available",
+                "card_num": "",
+                "rarity": "",
+                "timestamp": int(time.time()),
+                "tcg": active_tcg,
+                "total_cards": 0,
+                "error": f"No {active_tcg.upper()} cards found. Download cards or switch TCG.",
+            })
+            config, _ = wait_with_polling(60)
+            new_tcg = config["active_tcg"]
+            if new_tcg != active_tcg:
+                active_tcg = new_tcg
+                library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+                master_index = load_master_index(library_dir)
+                collection = None
+                if config["collection_only"]:
+                    collection = load_collection(active_tcg)
+                    if not collection:
+                        collection = None
+                deck = ShuffleDeck(library_dir, collection)
+            else:
+                # Same TCG — reshuffle in case cards were just downloaded
+                deck.reshuffle()
             continue
 
         logger.info(f"Displaying: {os.path.basename(card_path)}")
@@ -408,6 +471,9 @@ def main():
                     if not collection:
                         collection = None
                 deck = ShuffleDeck(library_dir, collection)
+                if deck.total == 0:
+                    logger.warning(f"Switched to {active_tcg} but no cards found. "
+                                   f"Will wait for download or TCG change.")
 
             del final_img
             gc.collect()

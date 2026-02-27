@@ -485,6 +485,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .btn-danger:hover { background: #a52a2a; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-block { display: block; width: 100%; text-align: center; }
+.btn:active { transform: scale(0.95); }
+.btn-primary:active { background: #1e7a99; transform: scale(0.95); }
+.btn-secondary:active { background: #36A5CA; color: #FCFDF0; transform: scale(0.95); }
+.btn-danger:active { background: #6b1515; transform: scale(0.95); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px solid #36A5CA44; border-radius: 4px; padding: 8px; font-size: 14px; width: 100%; }
 .form-group { margin-bottom: 12px; }
@@ -547,16 +551,17 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div class="stat"><span class="stat-label">Rarity</span><span class="stat-value" id="st-rarity">&mdash;</span></div>
       <div class="stat"><span class="stat-label">TCG</span><span class="stat-value" id="st-tcg">&mdash;</span></div>
       <div class="stat"><span class="stat-label">Cards in Deck</span><span class="stat-value" id="st-total">&mdash;</span></div>
+      <div class="stat" id="st-error-row" style="display:none"><span class="stat-label" style="color:#ff6b6b">Status</span><span class="stat-value" style="color:#ff6b6b;font-size:12px" id="st-error"></span></div>
     </div>
   </div>
   <div class="flex-row" style="margin-bottom:12px">
-    <button class="btn btn-primary btn-block" onclick="nextCard()">Next Card</button>
+    <button class="btn btn-primary btn-block" onclick="nextCard(this)">Next Card</button>
   </div>
   <div class="card">
     <h3>Quick Switch</h3>
     <div class="flex-row">
-      <button class="btn btn-secondary btn-block" onclick="switchTCG('pokemon')">Pokemon</button>
-      <button class="btn btn-secondary btn-block" onclick="switchTCG('mtg')">MTG</button>
+      <button class="btn btn-secondary btn-block" onclick="switchTCG('pokemon', this)">Pokemon</button>
+      <button class="btn btn-secondary btn-block" onclick="switchTCG('mtg', this)">MTG</button>
     </div>
   </div>
 </div>
@@ -664,6 +669,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   </div>
 </div>
 
+<div id="toast" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#6BCCBD;color:#010001;padding:10px 24px;border-radius:20px;font-size:13px;font-weight:600;z-index:200;opacity:0;transition:opacity 0.3s;pointer-events:none;"></div>
+
 <div class="footer">
   <div>Costa Mesa Tech Solutions &mdash; a brand of Pine Heights Ventures LLC</div>
   <div class="ip" id="footer-ip"></div>
@@ -684,6 +691,20 @@ function showTab(name) {
   if (name === 'display') refreshStatus();
 }
 
+// --- Toast ---
+function showToast(msg, duration) {
+  duration = duration || 2000;
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.offsetHeight; // force reflow
+  el.style.opacity = '1';
+  setTimeout(function() {
+    el.style.opacity = '0';
+    setTimeout(function() { el.style.display = 'none'; }, 300);
+  }, duration);
+}
+
 // --- Display ---
 function refreshStatus() {
   fetch(API + '/api/status').then(r => r.json()).then(d => {
@@ -692,21 +713,61 @@ function refreshStatus() {
     document.getElementById('st-rarity').textContent = d.rarity || '\\u2014';
     document.getElementById('st-tcg').textContent = (d.tcg || '\\u2014').toUpperCase();
     document.getElementById('st-total').textContent = d.total_cards || '\\u2014';
+    // Show error status if present
+    var errRow = document.getElementById('st-error-row');
+    var errEl = document.getElementById('st-error');
+    if (d.error) {
+      errEl.textContent = d.error;
+      errRow.style.display = 'flex';
+    } else {
+      errRow.style.display = 'none';
+    }
     // Refresh preview image with cache buster
     const img = document.getElementById('st-preview');
-    img.src = '/api/card_image?t=' + Date.now();
+    if (d.card_path) {
+      img.src = '/api/card_image?t=' + Date.now();
+    } else {
+      img.style.display = 'none';
+    }
   }).catch(() => {});
 }
 
-function nextCard() {
-  fetch(API + '/api/next', {method:'POST'}).then(() => {
-    setTimeout(refreshStatus, 3000);
-  });
+function nextCard(btn) {
+  var orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  fetch(API + '/api/next', {method:'POST'})
+    .then(function() {
+      btn.textContent = orig;
+      btn.disabled = false;
+      showToast('Card change sent');
+      setTimeout(refreshStatus, 3000);
+    })
+    .catch(function() {
+      btn.textContent = orig;
+      btn.disabled = false;
+      showToast('Failed to send');
+    });
 }
 
-function switchTCG(tcg) {
-  fetch(API + '/api/config', {method:'POST', body: JSON.stringify({active_tcg: tcg})})
-    .then(() => setTimeout(refreshStatus, 2000));
+function switchTCG(tcg, activeBtn) {
+  var btns = document.querySelectorAll('[onclick^="switchTCG"]');
+  btns.forEach(function(b) { b.disabled = true; });
+  var orig = activeBtn.textContent;
+  activeBtn.textContent = 'Switching...';
+  fetch(API + '/api/config', {method:'POST', body: JSON.stringify({active_tcg: tcg}),
+    headers:{'Content-Type':'application/json'}})
+    .then(function() {
+      activeBtn.textContent = orig;
+      btns.forEach(function(b) { b.disabled = false; });
+      showToast('Switched to ' + tcg.toUpperCase());
+      setTimeout(refreshStatus, 2000);
+    })
+    .catch(function() {
+      activeBtn.textContent = orig;
+      btns.forEach(function(b) { b.disabled = false; });
+      showToast('Switch failed');
+    });
 }
 
 // --- Settings ---

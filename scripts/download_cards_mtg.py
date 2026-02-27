@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """
 Download Magic: The Gathering card images and metadata from Scryfall.
+Uses the per-set search API for low memory usage (works on Pi Zero with 512MB RAM).
 Supports resume - re-run safely to pick up where you left off.
 
 Usage:
@@ -15,20 +16,24 @@ import time
 import random
 import sys
 import argparse
-import tempfile
+import gc
 
 # --- CONFIGURATION ---
 BASE_DIR = "/home/pi/mtg_cards"
 
 # Scryfall API (free, no API key needed)
-BULK_DATA_URL = "https://api.scryfall.com/bulk-data/default-cards"
+SETS_URL = "https://api.scryfall.com/sets"
+SEARCH_URL = "https://api.scryfall.com/cards/search"
 
 HEADERS = {
     'User-Agent': 'InkSlab/1.0 (https://github.com/costamesatechsolutions/inkslab-eink-tcg-display)',
     'Accept': 'application/json',
 }
 
-# Rate limiting (Scryfall image CDN has no rate limit, but be polite)
+# Scryfall asks for 50-100ms between API requests
+API_DELAY = 0.1  # seconds between API calls
+
+# Rate limiting for image CDN (be polite)
 DOWNLOAD_DELAY_MIN = 0.1  # seconds
 DOWNLOAD_DELAY_MAX = 0.3
 COOLDOWN_EVERY = 200      # downloads
@@ -36,6 +41,14 @@ COOLDOWN_SECONDS = 10
 
 # Skip these layout types (no standard card image)
 SKIP_LAYOUTS = {"art_series", "token", "double_faced_token", "emblem", "planar", "scheme", "vanguard"}
+
+# Set types that contain real playable cards with standard card images
+INCLUDE_SET_TYPES = {
+    "core", "expansion", "masters", "draft_innovation",
+    "commander", "starter", "duel_deck", "planechase",
+    "archenemy", "premium_deck", "from_the_vault",
+    "spellbook", "arsenal", "funny", "masterpiece", "box",
+}
 
 
 def download_file(url, filepath):
@@ -53,170 +66,136 @@ def download_file(url, filepath):
         return f"FAIL: {e}"
 
 
-def fetch_bulk_data(since_year=None):
-    """Download and parse Scryfall bulk data. Returns list of filtered card dicts."""
-    print("1. Fetching bulk data download URL...")
+def fetch_sets(since_year=None):
+    """Fetch all MTG sets from Scryfall, filtered by type and optional year."""
+    print("1. Fetching set list from Scryfall...")
     try:
-        r = requests.get(BULK_DATA_URL, headers=HEADERS, timeout=30)
-        bulk_info = r.json()
-        download_url = bulk_info['download_uri']
-        size_mb = bulk_info.get('size', 0) / (1024 * 1024)
-        print(f"   Bulk data: {size_mb:.0f} MB")
+        r = requests.get(SETS_URL, headers=HEADERS, timeout=30)
+        r.raise_for_status()
+        all_sets = r.json().get("data", [])
     except Exception as e:
-        print(f"   Error fetching bulk data info: {e}")
+        print(f"   Error fetching sets: {e}")
         return []
 
-    print("2. Downloading bulk data (this takes a few minutes)...")
-    tmp_path = os.path.join(tempfile.gettempdir(), "scryfall_bulk.json")
-    try:
-        r = requests.get(download_url, headers=HEADERS, stream=True, timeout=600)
-        downloaded = 0
-        with open(tmp_path, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=1024 * 1024):
-                f.write(chunk)
-                downloaded += len(chunk)
-                print(f"\r   Downloaded {downloaded / (1024*1024):.0f} MB...", end="", flush=True)
-        print(f"\r   Downloaded {downloaded / (1024*1024):.0f} MB — done.")
-    except Exception as e:
-        print(f"\n   Error downloading bulk data: {e}")
-        return []
-
-    print("3. Parsing card data...")
-    try:
-        with open(tmp_path, 'r', encoding='utf-8') as f:
-            all_cards = json.load(f)
-    except Exception as e:
-        print(f"   Error parsing JSON: {e}")
-        return []
-
-    # Filter: English, paper game, standard layouts, with images
+    today = time.strftime("%Y-%m-%d")
     filtered = []
-    for card in all_cards:
-        if card.get('lang') != 'en':
+    for s in all_sets:
+        set_type = s.get("set_type", "")
+        if set_type not in INCLUDE_SET_TYPES:
             continue
-        if 'paper' not in card.get('games', []):
+        released = s.get("released_at", "9999-99-99")
+        # Skip sets with future release dates
+        if released > today:
             continue
-        if card.get('layout') in SKIP_LAYOUTS:
+        if since_year and released[:4] < str(since_year):
             continue
-        if 'image_uris' not in card:
-            continue
-        if since_year and card.get('released_at', '9999')[:4] < str(since_year):
-            continue
-        filtered.append(card)
+        filtered.append(s)
 
-    print(f"   {len(filtered)} cards after filtering ({len(all_cards)} total in bulk data)")
-
-    # Clean up temp file
-    try:
-        os.remove(tmp_path)
-    except OSError:
-        pass
-
+    # Sort by release date, newest first
+    filtered.sort(key=lambda s: s.get("released_at", "0000"), reverse=True)
+    total_cards = sum(s.get("card_count", 0) for s in filtered)
+    print(f"   Found {len(filtered)} sets (~{total_cards} cards)")
     return filtered
 
 
-def build_metadata(cards):
-    """Build master_index.json and per-set _data.json from card list."""
-    print("4. Building metadata...")
-    os.makedirs(BASE_DIR, exist_ok=True)
+def fetch_cards_for_set(set_code):
+    """Fetch all English cards for a single set using paginated search API.
+    Returns a list of card dicts. Memory-friendly: only one page (~175 cards) at a time."""
+    cards = []
+    url = f"{SEARCH_URL}?q=set%3A{set_code}+lang%3Aen&unique=prints&order=set"
 
-    # Group cards by set
-    sets = {}
+    while url:
+        time.sleep(API_DELAY)
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if r.status_code == 404:
+                # No cards found for this set (empty set)
+                break
+            r.raise_for_status()
+            page = r.json()
+        except requests.exceptions.HTTPError as e:
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 429:
+                # Rate limited -- back off and retry
+                print("     Rate limited, waiting 2s...")
+                time.sleep(2)
+                continue
+            print(f"     API error for set {set_code}: {e}")
+            break
+        except Exception as e:
+            print(f"     Request error for set {set_code}: {e}")
+            break
+
+        page_cards = page.get("data", [])
+        # Filter: paper cards, standard layouts, with images
+        for card in page_cards:
+            if "paper" not in card.get("games", []):
+                continue
+            if card.get("layout") in SKIP_LAYOUTS:
+                continue
+            if "image_uris" not in card:
+                continue
+            cards.append(card)
+
+        if page.get("has_more") and page.get("next_page"):
+            url = page["next_page"]
+        else:
+            url = None
+
+    return cards
+
+
+def process_set(set_info, cards):
+    """Build _data.json and download images for one set. Returns (new_downloads, skipped)."""
+    set_code = set_info["code"]
+    set_dir = os.path.join(BASE_DIR, set_code)
+    os.makedirs(set_dir, exist_ok=True)
+
+    # Build per-set _data.json
+    slim_db = {}
     for card in cards:
-        set_code = card['set']
-        if set_code not in sets:
-            sets[set_code] = {
-                "name": card['set_name'],
-                "year": card.get('released_at', '0000')[:4],
-                "cards": []
-            }
-        sets[set_code]["cards"].append(card)
-
-    # Master index
-    master_index = {}
-    for set_code, info in sets.items():
-        master_index[set_code] = {
-            "name": info["name"],
-            "year": info["year"]
+        card_id = card["id"]
+        slim_db[card_id] = {
+            "name": card.get("name", "Unknown"),
+            "number": card.get("collector_number", "00"),
+            "rarity": card.get("rarity", "common").replace("_", " ").title(),
         }
 
-    index_path = os.path.join(BASE_DIR, "master_index.json")
-    with open(index_path, 'w') as f:
-        json.dump(master_index, f)
-    print(f"   Saved master_index.json ({len(master_index)} sets)")
+    data_file = os.path.join(set_dir, "_data.json")
+    with open(data_file, "w") as f:
+        json.dump(slim_db, f)
 
-    # Per-set _data.json
-    for set_code, info in sets.items():
-        set_dir = os.path.join(BASE_DIR, set_code)
-        os.makedirs(set_dir, exist_ok=True)
-
-        slim_db = {}
-        for card in info["cards"]:
-            card_id = card['id']
-            slim_db[card_id] = {
-                "name": card.get('name', 'Unknown'),
-                "number": card.get('collector_number', '00'),
-                "rarity": card.get('rarity', 'common').replace('_', ' ').title(),
-            }
-
-        data_file = os.path.join(set_dir, "_data.json")
-        with open(data_file, 'w') as f:
-            json.dump(slim_db, f)
-
-    print(f"   Saved _data.json for {len(sets)} sets")
-    return sets
-
-
-def download_images(sets):
-    """Download card images from Scryfall CDN."""
-    total_cards = sum(len(info["cards"]) for info in sets.values())
-    print(f"\n5. Downloading card images ({total_cards} cards)...")
-    print("   Press CTRL+C to stop (you can resume later).\n")
-
+    # Download images
     download_count = 0
     skip_count = 0
-    card_num = 0
+    for card in cards:
+        card_id = card["id"]
+        img_url = card.get("image_uris", {}).get("large",
+                  card.get("image_uris", {}).get("normal"))
+        if not img_url:
+            continue
 
-    # Sort sets by year (newest first)
-    sorted_sets = sorted(sets.items(), key=lambda x: x[1]["year"], reverse=True)
+        # Use Scryfall UUID as filename (unique across all sets)
+        filepath = os.path.join(set_dir, f"{card_id}.png")
+        status = download_file(img_url, filepath)
 
-    for set_code, info in sorted_sets:
-        set_dir = os.path.join(BASE_DIR, set_code)
-        set_name = info["name"]
-        print(f"   {set_name} ({set_code}) — {len(info['cards'])} cards")
+        if status == "DOWNLOADED":
+            download_count += 1
+            time.sleep(random.uniform(DOWNLOAD_DELAY_MIN, DOWNLOAD_DELAY_MAX))
+            if download_count % COOLDOWN_EVERY == 0:
+                print(f"     [Cooldown {COOLDOWN_SECONDS}s...]")
+                time.sleep(COOLDOWN_SECONDS)
+        elif status == "EXISTS":
+            skip_count += 1
+        else:
+            print(f"     Failed: {card.get('name', card_id)} ({status})")
 
-        for card in info["cards"]:
-            card_num += 1
-            card_id = card['id']
-            img_url = card['image_uris'].get('large', card['image_uris'].get('normal'))
-            if not img_url:
-                continue
-
-            # Use Scryfall UUID as filename (unique across all sets)
-            filepath = os.path.join(set_dir, f"{card_id}.png")
-            status = download_file(img_url, filepath)
-
-            if status == "DOWNLOADED":
-                download_count += 1
-                if download_count % 50 == 0:
-                    print(f"     [{download_count} downloaded, {card_num}/{total_cards} processed]")
-
-                time.sleep(random.uniform(DOWNLOAD_DELAY_MIN, DOWNLOAD_DELAY_MAX))
-                if download_count % COOLDOWN_EVERY == 0:
-                    print(f"     [Cooldown {COOLDOWN_SECONDS}s...]")
-                    time.sleep(COOLDOWN_SECONDS)
-            elif status == "EXISTS":
-                skip_count += 1
-            else:
-                print(f"     Failed: {card.get('name', card_id)} ({status})")
-
-    print(f"\n=== Done! Downloaded {download_count} new images, skipped {skip_count} existing. ===")
+    return download_count, skip_count
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download MTG card images from Scryfall")
-    parser.add_argument('--since', type=int, metavar='YEAR',
-                        help='Only download sets released in this year or later (e.g. --since 2018)')
+    parser.add_argument("--since", type=int, metavar="YEAR",
+                        help="Only download sets released in this year or later (e.g. --since 2018)")
     args = parser.parse_args()
 
     print("=== MTG Card Downloader (Scryfall) ===\n")
@@ -224,13 +203,58 @@ def main():
     if args.since:
         print(f"Filtering to sets released {args.since} or later.\n")
 
-    cards = fetch_bulk_data(since_year=args.since)
-    if not cards:
-        print("No cards to download.")
+    sets = fetch_sets(since_year=args.since)
+    if not sets:
+        print("No sets found to download.")
         return
 
-    sets = build_metadata(cards)
-    download_images(sets)
+    os.makedirs(BASE_DIR, exist_ok=True)
+
+    # Build master_index.json from set list (no card data needed)
+    master_index = {}
+    for s in sets:
+        master_index[s["code"]] = {
+            "name": s["name"],
+            "year": s.get("released_at", "0000")[:4],
+        }
+    index_path = os.path.join(BASE_DIR, "master_index.json")
+    with open(index_path, "w") as f:
+        json.dump(master_index, f)
+    print(f"2. Saved master_index.json ({len(master_index)} sets)\n")
+
+    print("3. Downloading cards per set...")
+    print("   Press CTRL+C to stop (you can resume later).\n")
+
+    total_downloaded = 0
+    total_skipped = 0
+
+    for i, s in enumerate(sets):
+        set_code = s["code"]
+        set_name = s["name"]
+        expected = s.get("card_count", "?")
+        print(f"[{i + 1}/{len(sets)}] {set_name} ({set_code}) — ~{expected} cards")
+
+        cards = fetch_cards_for_set(set_code)
+        if not cards:
+            print(f"     No downloadable cards found, skipping.")
+            continue
+
+        print(f"     Fetched {len(cards)} cards from API, downloading images...")
+        new_downloads, skipped = process_set(s, cards)
+        total_downloaded += new_downloads
+        total_skipped += skipped
+
+        if new_downloads > 0:
+            print(f"     +{new_downloads} new, {skipped} already existed")
+        elif skipped > 0:
+            print(f"     All {skipped} cards already downloaded")
+
+        # Free memory between sets
+        del cards
+        gc.collect()
+
+    print(f"\n=== Done! Downloaded {total_downloaded} new images, "
+          f"skipped {total_skipped} existing. ===")
 
 
 if __name__ == "__main__":
