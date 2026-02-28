@@ -583,7 +583,52 @@ def main():
                     deck.deck.insert(0, previous)
                 continue
 
-            # If TCG, collection mode, or collection contents changed, rebuild the deck
+            # Collection content changed — rebuild deck but keep showing current card
+            if action == "collection_changed" and config["collection_only"]:
+                rebuild_deck()
+                # Update status with new queue immediately (no card advance)
+                new_next = []
+                for nc in deck.peek(5):
+                    try:
+                        new_next.append(card_summary(nc, master_index))
+                    except Exception:
+                        pass
+                new_prev = []
+                for pc in deck.history[:4]:
+                    try:
+                        new_prev.append(card_summary(pc, master_index))
+                    except Exception:
+                        pass
+                paused = os.path.exists(PAUSE_FILE)
+                remaining = max(0, next_change - int(time.time())) if next_change else wait
+                write_status({
+                    "card_path": card_path,
+                    "set_name": card_info.get("set_name", ""),
+                    "set_info": card_info.get("set_info", ""),
+                    "card_num": card_info.get("card_num", ""),
+                    "rarity": card_info.get("rarity", ""),
+                    "timestamp": int(time.time()),
+                    "tcg": active_tcg,
+                    "total_cards": deck.total,
+                    "prev_cards": new_prev,
+                    "next_cards": new_next,
+                    "next_change": next_change,
+                    "paused": paused,
+                    "interval": wait,
+                })
+                logger.info(f"Collection updated — deck rebuilt ({deck.total} cards), queue refreshed")
+                # Go back to waiting, don't advance card
+                config, action = wait_with_polling(remaining)
+                # Handle whatever woke us from the resumed wait
+                if action == "prev":
+                    if len(deck.history) > 1:
+                        current = deck.history.pop(0)
+                        previous = deck.history.pop(0)
+                        deck.deck.insert(0, current)
+                        deck.deck.insert(0, previous)
+                    continue
+
+            # If TCG or collection mode changed, rebuild and advance to new card
             new_tcg = config["active_tcg"]
             needs_rebuild = (new_tcg != active_tcg
                              or config["collection_only"] != _deck_collection_only
