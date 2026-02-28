@@ -16,7 +16,6 @@ import os
 import time
 import random
 import json
-import gc
 import logging
 import signal
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
@@ -402,7 +401,6 @@ def main():
 
     def _handle_shutdown(signum, frame):
         nonlocal _shutdown
-        logger.info(f"Received signal {signum}, shutting down...")
         _shutdown = True
 
     signal.signal(signal.SIGTERM, _handle_shutdown)
@@ -495,7 +493,6 @@ def main():
                                        f"Will wait for download or TCG change.")
 
                 del final_img
-                gc.collect()
             else:
                 logger.warning(f"Skipping bad image: {card_path}")
                 time.sleep(5)
