@@ -302,7 +302,9 @@ def api_current_card_image():
                 status = json.load(f)
             card_path = status.get("card_path")
             if card_path and os.path.exists(card_path):
-                return send_file(card_path, mimetype='image/png')
+                resp = send_file(card_path, mimetype='image/png')
+                resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                return resp
         except Exception:
             pass
     return '', 404
@@ -1398,7 +1400,10 @@ function refreshStatus() {
       document.getElementById('st-total').textContent = d.total_cards || '\\u2014';
       var img = document.getElementById('st-preview');
       if (d.card_path) {
-        if (d.card_path !== _lastStatus.card_path) {
+        var needsReload = (d.card_path !== _lastStatus.card_path
+          || d.tcg !== _lastStatus.tcg
+          || (_lastStatus.pending && !d.pending));
+        if (needsReload) {
           img.src = '/api/card_image?t=' + Date.now();
           hidePreviewLoading();
         }
@@ -1406,7 +1411,6 @@ function refreshStatus() {
         img.style.display = 'none';
         hidePreviewLoading();
       }
-      if (_lastStatus.pending && !d.pending) hidePreviewLoading();
       renderQueue(d);
     }
     // Update pause button and countdown
@@ -1415,7 +1419,7 @@ function refreshStatus() {
     // Disable prev button if no history
     document.getElementById('btn-prev').disabled = !(d.prev_cards && d.prev_cards.length);
     // Stop rapid polling once daemon has processed
-    if (_rapidPoll && !d.pending && d.card_path !== _lastStatus.card_path) {
+    if (_rapidPoll && !d.pending && (d.card_path !== _lastStatus.card_path || d.tcg !== _lastStatus.tcg || (_lastStatus.pending && !d.pending))) {
       clearInterval(_rapidPoll);
       _rapidPoll = null;
       _pendingAction = false;
