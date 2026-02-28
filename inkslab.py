@@ -308,8 +308,8 @@ class ShuffleDeck:
             return None
         card = self.deck.pop(0)
         self.history.insert(0, card)
-        if len(self.history) > 4:
-            self.history = self.history[:4]
+        if len(self.history) > 8:
+            self.history = self.history[:8]
         return card
 
     def peek(self, n=3):
@@ -510,13 +510,13 @@ def main():
 
             # Build prev/next card queue for the web dashboard
             prev_cards = []
-            for p in deck.history[1:2]:
+            for p in deck.history[1:5]:
                 try:
                     prev_cards.append(card_summary(p, master_index))
                 except Exception:
                     pass
             next_cards = []
-            for n in deck.peek(3):
+            for n in deck.peek(5):
                 try:
                     next_cards.append(card_summary(n, master_index))
                 except Exception:

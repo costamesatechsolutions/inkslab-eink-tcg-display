@@ -661,10 +661,12 @@ def api_search():
     owned_ids = set(collection.get(tcg, []))
 
     results = []
+    sets_searched = 0
     for d in os.listdir(library):
         data_file = os.path.join(library, d, "_data.json")
         if not os.path.exists(data_file):
             continue
+        sets_searched += 1
         try:
             with open(data_file, 'r') as f:
                 data = json.load(f)
@@ -685,7 +687,8 @@ def api_search():
             pass
 
     results.sort(key=lambda x: (x["name"].lower(), x["set_id"]))
-    return jsonify(results[:100])
+    total = len(results)
+    return jsonify({"results": results[:200], "total": total, "sets_searched": sets_searched})
 
 
 @app.route('/api/download/start', methods=['POST'])
@@ -974,6 +977,11 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .search-result-name { color: #FCFDF0; font-weight: 600; }
 .search-result-set { color: #6BCCBD; font-size: 11px; }
 .search-result-rarity { color: #6BCCBD; font-size: 11px; }
+.search-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.search-filter-chip { display: inline-flex; align-items: center; gap: 4px; background: #36A5CA22; border: 1px solid #36A5CA88; color: #D8E6E4; border-radius: 16px; padding: 4px 8px 4px 10px; font-size: 12px; }
+.search-filter-chip .sfc-count { color: #6BCCBD; font-size: 11px; }
+.search-filter-chip .sfc-x { cursor: pointer; color: #6BCCBD; font-size: 14px; line-height: 1; margin-left: 2px; padding: 0 2px; border-radius: 50%; }
+.search-filter-chip .sfc-x:hover { color: #ff6b6b; background: #ff6b6b22; }
 </style>
 </head>
 <body>
@@ -1088,6 +1096,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   <div class="card">
     <h3>Search Cards</h3>
     <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Find a Pokemon or card by name and add all versions to your collection.</p>
+    <div id="search-filters" class="search-filters" style="display:none"></div>
     <div class="search-wrap">
       <span class="search-icon">&#128269;</span>
       <input type="text" id="search-input" placeholder="Search by name (e.g. Pikachu)" oninput="debounceSearch()">
@@ -1623,31 +1632,67 @@ function closePreview() {
 
 // --- Search ---
 var _searchTimer = null;
+var _searchAdded = {}; // {name_lower: {name, count}} — tracks names added via search
+
 function debounceSearch() {
   if (_searchTimer) clearTimeout(_searchTimer);
   _searchTimer = setTimeout(doSearch, 350);
 }
+
+function renderSearchFilters() {
+  var el = document.getElementById('search-filters');
+  var names = Object.values(_searchAdded);
+  if (!names.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = names.map(function(f) {
+    var safeN = f.name.replace(/'/g, "\\\\'");
+    return '<span class="search-filter-chip">' + f.name + ' <span class="sfc-count">(' + f.count + ')</span><span class="sfc-x" onclick="removeSearchFilter(\\'' + safeN + '\\')">&times;</span></span>';
+  }).join('');
+}
+
+function removeSearchFilter(name) {
+  var key = name.toLowerCase();
+  if (!_searchAdded[key]) return;
+  var chip = event.target.parentElement;
+  chip.style.opacity = '0.5';
+  fetch(API + '/api/search?q=' + encodeURIComponent(name)).then(function(r) { return r.json(); }).then(function(data) {
+    var ids = data.results.filter(function(c) { return c.name.toLowerCase() === key; }).map(function(c) { return c.id; });
+    return fetch(API + '/api/collection/toggle_batch', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({card_ids: ids, owned: false})});
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    delete _searchAdded[key];
+    renderSearchFilters();
+    showToast('Removed ' + (d.count || 0) + ' ' + name + ' cards');
+    doSearch();
+    loadRarities();
+  }).catch(function() { chip.style.opacity = '1'; });
+}
+
 function doSearch() {
   var q = document.getElementById('search-input').value.trim();
   var el = document.getElementById('search-results');
   if (q.length < 2) { el.innerHTML = ''; return; }
   el.innerHTML = '<div style="color:#6BCCBD;font-size:12px;padding:8px">Searching...</div>';
-  fetch(API + '/api/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(results) {
-    if (!results.length) { el.innerHTML = '<div style="color:#6BCCBD;font-size:12px;padding:8px">No results found</div>'; return; }
-    // Group by name for "select all versions" feature
+  fetch(API + '/api/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(data) {
+    var results = data.results;
+    if (!results.length) { el.innerHTML = '<div style="color:#6BCCBD;font-size:12px;padding:8px">No results found (searched ' + data.sets_searched + ' sets)</div>'; return; }
     var groups = {};
     results.forEach(function(c) {
       var key = c.name.toLowerCase();
       if (!groups[key]) groups[key] = {name: c.name, cards: []};
       groups[key].cards.push(c);
     });
-    var html = '<div style="font-size:11px;color:#6BCCBD;margin-bottom:6px">' + results.length + ' results</div>';
+    var header = '<div style="font-size:11px;color:#6BCCBD;margin-bottom:6px">' + data.total + ' results across ' + data.sets_searched + ' sets';
+    if (data.total > results.length) header += ' (showing ' + results.length + ')';
+    header += '</div>';
+    var html = header;
     Object.values(groups).forEach(function(g) {
       var allOwned = g.cards.every(function(c) { return c.owned; });
+      var ownedCount = g.cards.filter(function(c) { return c.owned; }).length;
+      var safeN = g.name.replace(/'/g, "\\\\'");
       html += '<div style="border-bottom:1px solid #1F333F;padding:6px 0">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-      html += '<span class="search-result-name">' + g.name + ' <span style="color:#6BCCBD;font-size:11px;font-weight:400">(' + g.cards.length + ' version' + (g.cards.length > 1 ? 's' : '') + ')</span></span>';
-      html += '<button class="btn btn-secondary btn-sm" onclick="toggleSearchGroup(this,\\'' + g.name.replace(/'/g,"\\\\'") + '\\',' + (!allOwned) + ')">' + (allOwned ? 'Remove All' : 'Add All') + '</button>';
+      html += '<span class="search-result-name">' + g.name + ' <span style="color:#6BCCBD;font-size:11px;font-weight:400">' + ownedCount + '/' + g.cards.length + ' owned</span></span>';
+      html += '<button class="btn btn-secondary btn-sm" onclick="toggleSearchGroup(this,\\'' + safeN + '\\',' + (!allOwned) + ')">' + (allOwned ? 'Remove All' : 'Add All') + '</button>';
       html += '</div>';
       html += '<div style="margin-top:4px">';
       g.cards.forEach(function(c) {
@@ -1663,21 +1708,40 @@ function doSearch() {
     el.innerHTML = html;
   }).catch(function() { el.innerHTML = '<div style="color:#ff6b6b;font-size:12px;padding:8px">Search failed</div>'; });
 }
+
 function toggleSearchGroup(btn, name, owned) {
   btn.disabled = true;
   btn.textContent = owned ? 'Adding...' : 'Removing...';
   var q = document.getElementById('search-input').value.trim();
-  fetch(API + '/api/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(results) {
-    var ids = results.filter(function(c) { return c.name.toLowerCase() === name.toLowerCase(); }).map(function(c) { return c.id; });
-    return fetch(API + '/api/collection/toggle_batch', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({card_ids: ids, owned: owned})});
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    showToast((owned ? 'Added ' : 'Removed ') + (d.count || 0) + ' ' + name + ' cards');
+  fetch(API + '/api/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(data) {
+    var matching = data.results.filter(function(c) { return c.name.toLowerCase() === name.toLowerCase(); });
+    var ids = matching.map(function(c) { return c.id; });
+    return fetch(API + '/api/collection/toggle_batch', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({card_ids: ids, owned: owned})}).then(function(r) { return r.json(); }).then(function(d) { return {d: d, count: matching.length}; });
+  }).then(function(res) {
+    var key = name.toLowerCase();
+    if (owned) {
+      _searchAdded[key] = {name: name, count: res.count};
+    } else {
+      delete _searchAdded[key];
+    }
+    renderSearchFilters();
+    showToast((owned ? 'Added ' : 'Removed ') + (res.d.count || 0) + ' ' + name + ' cards');
     doSearch();
     loadRarities();
   }).catch(function() { btn.disabled = false; btn.textContent = owned ? 'Add All' : 'Remove All'; });
 }
 
 // --- Downloads ---
+function fmtSize(gb, mb) {
+  if (gb >= 0.1) return gb.toFixed(1) + ' GB';
+  if (mb > 0) return mb + ' MB';
+  return '0 MB';
+}
+function fmtSizeShort(gb, mb) {
+  if (gb >= 0.1) return gb.toFixed(1) + 'G';
+  if (mb > 0) return mb + 'M';
+  return '';
+}
 function loadStorage() {
   fetch(API + '/api/storage').then(function(r) { return r.json(); }).then(function(info) {
     var el = document.getElementById('storage-info');
@@ -1685,18 +1749,23 @@ function loadStorage() {
     var totalGb = info._disk.total_gb || 1;
     var freeGb = info._disk.free_gb || 0;
     var pokGb = (info.pokemon && info.pokemon.size_gb) || 0;
+    var pokMb = (info.pokemon && info.pokemon.size_mb) || 0;
     var mtgGb = (info.mtg && info.mtg.size_gb) || 0;
+    var mtgMb = (info.mtg && info.mtg.size_mb) || 0;
     var usedGb = Math.round((totalGb - freeGb) * 100) / 100;
     var otherGb = Math.max(0, Math.round((usedGb - pokGb - mtgGb) * 100) / 100);
     var pokPct = (pokGb / totalGb * 100);
     var mtgPct = (mtgGb / totalGb * 100);
     var otherPct = (otherGb / totalGb * 100);
     var freePct = (freeGb / totalGb * 100);
+    // Ensure non-zero segments have minimum visible width
+    if (pokGb > 0 && pokPct < 1.5) pokPct = 1.5;
+    if (mtgGb > 0 && mtgPct < 1.5) mtgPct = 1.5;
     var html = '<div class="storage-bar-wrap">';
     html += '<div class="storage-bar-label"><span>' + usedGb.toFixed(1) + ' GB used</span><span>' + freeGb.toFixed(1) + ' GB free / ' + totalGb.toFixed(0) + ' GB</span></div>';
     html += '<div class="storage-bar">';
-    if (pokPct > 0.5) html += '<div class="storage-seg seg-pokemon" style="width:' + pokPct.toFixed(1) + '%">' + (pokPct > 8 ? pokGb.toFixed(1) + 'G' : '') + '</div>';
-    if (mtgPct > 0.5) html += '<div class="storage-seg seg-mtg" style="width:' + mtgPct.toFixed(1) + '%">' + (mtgPct > 8 ? mtgGb.toFixed(1) + 'G' : '') + '</div>';
+    if (pokGb > 0) html += '<div class="storage-seg seg-pokemon" style="width:' + pokPct.toFixed(1) + '%">' + (pokPct > 8 ? fmtSizeShort(pokGb, pokMb) : '') + '</div>';
+    if (mtgGb > 0) html += '<div class="storage-seg seg-mtg" style="width:' + mtgPct.toFixed(1) + '%">' + (mtgPct > 8 ? fmtSizeShort(mtgGb, mtgMb) : '') + '</div>';
     if (otherPct > 0.5) html += '<div class="storage-seg seg-other" style="width:' + otherPct.toFixed(1) + '%">' + (otherPct > 8 ? otherGb.toFixed(1) + 'G' : '') + '</div>';
     html += '<div class="storage-seg seg-free" style="width:' + Math.max(freePct, 1).toFixed(1) + '%">' + (freePct > 12 ? freeGb.toFixed(1) + 'G' : '') + '</div>';
     html += '</div>';
@@ -1708,7 +1777,7 @@ function loadStorage() {
     html += '</div></div>';
     Object.entries(info).filter(function(e) { return !e[0].startsWith('_'); }).forEach(function(e) {
       var tcg = e[0], d = e[1];
-      html += '<div class="stat"><span class="stat-label">' + tcg.toUpperCase() + '</span><span class="stat-value">' + d.card_count + ' cards &middot; ' + d.set_count + ' sets &middot; ' + (d.size_gb || 0).toFixed(1) + ' GB</span></div>';
+      html += '<div class="stat"><span class="stat-label">' + tcg.toUpperCase() + '</span><span class="stat-value">' + d.card_count + ' cards &middot; ' + d.set_count + ' sets &middot; ' + fmtSize(d.size_gb || 0, d.size_mb || 0) + '</span></div>';
     });
     el.innerHTML = html;
   });
