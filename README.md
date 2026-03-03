@@ -40,7 +40,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon and Magic: The Gath
 |------|-------|
 | **Raspberry Pi Zero W H** | The "H" means headers are pre-soldered (required for the display HAT) |
 | **[Waveshare 4" e-Paper HAT+ (E)](https://www.waveshare.com/wiki/4inch_e-Paper_HAT%2B_(E)_Manual)** | Spectra 6 — the 7-color model |
-| **Micro SD card** | 32 GB for one TCG, 64 GB for both (Pokemon ~12 GB, MTG ~18 GB) |
+| **Micro SD card** | 32 GB for one TCG, 64 GB for both (Pokemon ~13 GB, MTG ~13 GB) |
 | **90-degree micro USB cable** | Optional but recommended — keeps the power cable hidden behind the frame |
 | **3D printed frame** | Print files on MakerWorld: **[InkSlab on MakerWorld](https://makerworld.com/en/models/2452200-inkslab-open-source-e-ink-tcg-display)** |
 
