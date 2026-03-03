@@ -14,7 +14,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon and Magic: The Gath
 - Shows card art in a graded-slab frame with set name, year, card number, and rarity
 - **Web Dashboard:** Control everything from your phone or browser at `http://inkslab.local`
 - **Live Player Controls:** Pause, play, skip, or go back, complete with an "Up Next" queue and countdown timer
-- **Collection Mode & Favorites:** Only display cards you own. Search for a card (e.g., "Pikachu") and instantly add *all* variations across every set to your collection
+- **Collection Mode & Search:** Only display cards you own. Search for a card (e.g., "Pikachu") and instantly add *all* variations across every set to your collection.
 - **Rarity Filtering:** Select or deselect all cards of a specific rarity (e.g., "Mythic Rare" or "Illustration Rare") across every set with one tap
 - **Smart Shuffle:** Remembers recently shown cards and pushes them to the back of the deck upon reshuffling so you always see fresh art
 - Runs 24/7 as a desk display, rotating cards every 10 minutes (configurable for day/night)
@@ -137,7 +137,7 @@ Once running, everything is managed from the dashboard at **http://inkslab.local
 
 ### Collection Tab
 - Browse every downloaded set and toggle ownership. Tap any card name to view a high-res preview modal
-- **Favorites & Search:** Search for any character or card and instantly add all versions of it to your collection
+- **Search Cards:** Search for any character or card and instantly add all versions of it to your collection
 - **Filter by Rarity:** Pick a rarity from the dropdown (e.g., "Rare Holo", "Mythic Rare") and select/deselect all matching cards across every set at once
 - **Set Management:** Select/Deselect an entire set, or use the per-set rarity chips to bulk-manage specific rarities within a single set
 
