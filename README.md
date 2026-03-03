@@ -214,3 +214,8 @@ inkslab-eink-tcg-display/
 ## License
 
 AGPL-3.0 — see [LICENSE](LICENSE)
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/image?repos=costamesatechsolutions/inkslab-eink-tcg-display&type=date&legend=top-left)](https://www.star-history.com/?repos=costamesatechsolutions%2Finkslab-eink-tcg-display&type=date&legend=top-left)
