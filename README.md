@@ -268,6 +268,7 @@ inkslab-eink-tcg-display/
   inkslab.py                     # Display daemon
   inkslab_web.py                 # Web dashboard (Flask)
   wifi_manager.py                # WiFi setup mode (nmcli wrapper)
+  requirements.txt               # Python dependencies
   inkslab.service                # systemd service for display
   inkslab_web.service            # systemd service for web dashboard
   lib/waveshare_epd/             # e-Paper display driver (bundled)
@@ -276,6 +277,7 @@ inkslab-eink-tcg-display/
     download_cards_mtg.py        # MTG card downloader (Scryfall API)
     download_cards_lorcana.py    # Lorcana card downloader (Lorcast API)
     ota_update.sh                # OTA update script (git pull + service restart)
+    selfheal.sh                  # Self-healer: runs before each service start, fixes broken states
 ```
 
 ## Credits
