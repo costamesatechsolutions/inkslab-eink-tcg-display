@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import time
 import threading
-from flask import Flask, request, jsonify, send_file, redirect
+from flask import Flask, request, jsonify, send_file, redirect, make_response
 import wifi_manager
 
 app = Flask(__name__)
@@ -3278,9 +3278,12 @@ function buildDynamicUI(registry) {
 
 @app.route('/')
 def dashboard():
-    if _wifi_setup_mode:
-        return WIFI_SETUP_HTML
-    return DASHBOARD_HTML
+    html = WIFI_SETUP_HTML if _wifi_setup_mode else DASHBOARD_HTML
+    resp = make_response(html)
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 if __name__ == '__main__':
