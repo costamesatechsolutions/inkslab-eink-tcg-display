@@ -371,7 +371,13 @@ def show_no_cards_screen(epd, config, ip=None):
         cx = DISPLAY_WIDTH // 2
 
         draw.text((cx, 55), "InkSlab", fill=(0, 0, 0), font=font_title, anchor="mm")
-        draw.text((cx, 115), "No cards downloaded yet.", fill=(0, 0, 0), font=font_body, anchor="mm")
+
+        collection_mode = config.get("collection_only", False)
+        if collection_mode:
+            draw.text((cx, 115), "No cards in your collection.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        else:
+            draw.text((cx, 115), "No cards downloaded yet.", fill=(0, 0, 0), font=font_body, anchor="mm")
+
         draw.text((cx, 160), "Scan or open in your", fill=(0, 0, 0), font=font_body, anchor="mm")
         draw.text((cx, 190), "web browser:", fill=(0, 0, 0), font=font_body, anchor="mm")
 
@@ -386,8 +392,12 @@ def show_no_cards_screen(epd, config, ip=None):
                 canvas.paste(qr_img, (cx - qr_size // 2, 270))
                 qr_img.close()
 
-        draw.text((cx, 430), "Then tap Downloads and pick", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 460), "a card game to download.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        if collection_mode:
+            draw.text((cx, 430), "Open the Collection tab and", fill=(0, 0, 0), font=font_body, anchor="mm")
+            draw.text((cx, 460), "mark the cards you own.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        else:
+            draw.text((cx, 430), "Then tap Downloads and pick", fill=(0, 0, 0), font=font_body, anchor="mm")
+            draw.text((cx, 460), "a card game to download.", fill=(0, 0, 0), font=font_body, anchor="mm")
         draw.text((cx, 520), "Cards will appear on this", fill=(0, 0, 0), font=font_body, anchor="mm")
         draw.text((cx, 550), "display once ready.", fill=(0, 0, 0), font=font_body, anchor="mm")
 
