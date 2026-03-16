@@ -221,11 +221,27 @@ def show_splash_screen(epd, config):
             font_body = font_title
             font_small = font_title
 
+        # Get WiFi info
+        ssid = None
+        signal = None
+        try:
+            ssid = wifi_manager.get_active_ssid()
+            signal = wifi_manager.get_signal_strength()
+        except Exception:
+            pass
+
         # Draw content centered
         cx = DISPLAY_WIDTH // 2
 
         # Title
-        draw.text((cx, 70), "InkSlab", fill=(0, 0, 0), font=font_title, anchor="mm")
+        draw.text((cx, 50), "InkSlab", fill=(0, 0, 0), font=font_title, anchor="mm")
+
+        # WiFi info line
+        if ssid:
+            wifi_text = f"WiFi: {ssid}"
+            if signal is not None:
+                wifi_text += f"  ({signal}%)"
+            draw.text((cx, 95), wifi_text, fill=(0, 0, 0), font=font_small, anchor="mm")
 
         # Dashboard URL with QR code
         url_text = f"http://{ip}"
@@ -370,7 +386,19 @@ def show_no_cards_screen(epd, config, ip=None):
 
         cx = DISPLAY_WIDTH // 2
 
-        draw.text((cx, 55), "InkSlab", fill=(0, 0, 0), font=font_title, anchor="mm")
+        draw.text((cx, 45), "InkSlab", fill=(0, 0, 0), font=font_title, anchor="mm")
+
+        # WiFi info
+        try:
+            ssid = wifi_manager.get_active_ssid()
+            signal = wifi_manager.get_signal_strength()
+            if ssid:
+                wifi_text = f"WiFi: {ssid}"
+                if signal is not None:
+                    wifi_text += f"  ({signal}%)"
+                draw.text((cx, 85), wifi_text, fill=(0, 0, 0), font=font_small, anchor="mm")
+        except Exception:
+            pass
 
         collection_mode = config.get("collection_only", False)
         if collection_mode:

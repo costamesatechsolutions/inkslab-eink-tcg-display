@@ -116,6 +116,21 @@ def get_active_ssid():
     return None
 
 
+def get_signal_strength():
+    """Return the signal strength (0-100) of the active WiFi connection, or None."""
+    rc, out, _ = _run_nmcli(["-t", "-e", "yes", "-f", "IN-USE,SIGNAL", "dev", "wifi", "list"])
+    if rc != 0:
+        return None
+    for line in out.splitlines():
+        parts = _split_nmcli_escaped(line)
+        if len(parts) >= 2 and parts[0] == "*":
+            try:
+                return int(parts[1])
+            except (ValueError, IndexError):
+                pass
+    return None
+
+
 def get_local_ip():
     """Get the Pi's local IP address (non-hotspot)."""
     try:
