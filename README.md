@@ -121,22 +121,15 @@ cd ~/inkslab
 sudo bash ~/inkslab/scripts/setup.sh
 ```
 
-This installs dependencies, configures the services, and reboots. Your SSH session will disconnect — reconnect after ~30 seconds.
+This installs dependencies, configures the services, and reboots. Your SSH session will disconnect — this is normal.
 
-After reconnecting, verify both services are running:
+After reboot, InkSlab will either:
+- **Show the WiFi setup screen** if no WiFi is saved — connect your phone to the `InkSlab-Setup` network and follow the on-screen instructions
+- **Show a splash screen with your dashboard URL** (e.g., `http://192.168.1.42`) if WiFi is already configured
 
-```bash
-sudo systemctl status inkslab inkslab_web
-```
+The Pi Zero W takes **1–2 minutes** to fully boot and display the first screen. Be patient — the e-ink display won't update until the services are ready.
 
-Both should show `active (running)`. Check logs if needed:
-
-```bash
-journalctl -u inkslab -n 50
-journalctl -u inkslab_web -n 50
-```
-
-The e-ink display will show a splash screen with your dashboard URL (e.g., `http://192.168.1.42`). Open that address on your phone or computer.
+> **Tip:** If buttons or controls on the dashboard ever stop responding after an update, open the dashboard in a **private/incognito window** (or clear your browser cache). The browser sometimes holds onto old cached JavaScript.
 
 ---
 
@@ -243,8 +236,8 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Problem | Fix |
 |---------|-----|
 | Can't find the dashboard | The IP is shown on the e-ink display at boot. If you missed it, restart the `inkslab` service or run `hostname -I` on the Pi. You can also check your router's admin page. |
-| SSH disconnected after starting services | Normal if the Pi had no WiFi configured — the InkSlab-Setup hotspot started. Check your phone's WiFi settings for `InkSlab-Setup`. If this happens unexpectedly, check `journalctl -u inkslab_web -n 30` for errors. |
-| Display not updating | Check SPI is enabled: `ls /dev/spi*` should show devices. Check service status: `sudo systemctl status inkslab`. Check logs: `journalctl -u inkslab -n 50` |
+| SSH disconnected after starting services | Normal — the Pi reboots or enters WiFi setup mode. Wait 1–2 minutes, then reconnect. |
+| Display not updating | The Pi Zero takes 1–2 minutes to boot. If still stuck after 3 minutes, check SPI is enabled (`ls /dev/spi*`) and service status (`sudo systemctl status inkslab`). |
 | Washed-out colors | Increase **Color Saturation** in the Settings tab (default 2.5, try 3.0–4.0) |
 | Web dashboard not loading | Run `journalctl -u inkslab_web -f` to check for errors |
 | Collection mode shows nothing | Mark some cards as owned in the Collection tab first |
@@ -254,6 +247,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | WiFi setup not appearing | Make sure you're connected to the `InkSlab-Setup` network. If the setup page doesn't auto-open, go to `http://10.42.0.1` manually. |
 | Wrong WiFi password | The setup page will show an error and let you retry. The InkSlab-Setup network will reappear automatically. |
 | Want to change WiFi | Go to **Settings** > **Change WiFi Network** in the dashboard. The InkSlab will re-enter setup mode. |
+| Buttons not responding | Open the dashboard in a **private/incognito window** or clear your browser cache. Old cached JavaScript from a previous version can cause this. |
 
 ---
 
