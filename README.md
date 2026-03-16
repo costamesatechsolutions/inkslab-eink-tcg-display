@@ -90,16 +90,15 @@ To change WiFi later, go to **Settings** > **Change WiFi Network** in the dashbo
 
 ### Step 2 — SSH In and Install
 
-SSH into your Pi from any terminal (find the IP from your router's admin page or connect a monitor):
+SSH into your Pi from any terminal (find the IP from your router's admin page):
 
 ```bash
 ssh pi@<your-pi-ip>
 ```
 
-Then run these commands to install everything:
+Then enable SPI (required for the e-ink display) and reboot:
 
 ```bash
-# Enable SPI (required for the display)
 sudo raspi-config nonint do_spi 0
 sudo reboot
 ```
@@ -107,30 +106,13 @@ sudo reboot
 After reboot, SSH back in and run:
 
 ```bash
-# Install system packages
+# Install all required packages
 sudo apt-get update
-sudo apt-get install -y python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero python3-requests python3-flask python3-qrcode git unzip
-
-# Install hardware libraries
-cd ~
-wget http://www.airspayce.com/mikem/bcm2835/bcm2835-1.71.tar.gz
-tar zxvf bcm2835-1.71.tar.gz && cd bcm2835-1.71
-sudo ./configure && sudo make && sudo make install
-cd ~
-wget https://github.com/joan2937/lg/archive/master.zip
-unzip master.zip && cd lg-master
-make && sudo make install
-sudo apt install -y gpiod libgpiod-dev
-
-# Install Waveshare driver
-cd ~
-wget "https://files.waveshare.com/wiki/4inch-e-Paper-HAT%2B-(E)/4inch_e-Paper_E.zip"
-unzip 4inch_e-Paper_E.zip -d 4inch_e-Paper_E
+sudo apt-get install -y python3-pil python3-numpy python3-spidev python3-gpiozero python3-lgpio python3-requests python3-flask python3-qrcode git
 
 # Clone InkSlab
-cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples
-git clone https://github.com/costamesatechsolutions/inkslab-eink-tcg-display.git
-cd inkslab-eink-tcg-display
+git clone https://github.com/costamesatechsolutions/inkslab-eink-tcg-display.git ~/inkslab
+cd ~/inkslab
 ```
 
 ### Step 3 — Start the Services
@@ -138,11 +120,25 @@ cd inkslab-eink-tcg-display
 ```bash
 sudo cp inkslab.service /etc/systemd/system/
 sudo cp inkslab_web.service /etc/systemd/system/
+sudo systemctl daemon-reload
 sudo systemctl enable inkslab inkslab_web
 sudo systemctl start inkslab inkslab_web
 ```
 
-That's it. The e-ink display will show a splash screen with your dashboard URL (e.g., `http://192.168.1.42`). Open that address on your phone or computer.
+Verify both services started successfully:
+
+```bash
+sudo systemctl status inkslab inkslab_web
+```
+
+Both should show `active (running)`. If either shows `failed`, check the logs:
+
+```bash
+journalctl -u inkslab -n 50
+journalctl -u inkslab_web -n 50
+```
+
+The e-ink display will show a splash screen with your dashboard URL (e.g., `http://192.168.1.42`). Open that address on your phone or computer.
 
 ---
 
@@ -191,8 +187,8 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ### Via SSH
 ```bash
 ssh pi@<your-pi-ip>
-cd ~/4inch_e-Paper_E/RaspberryPi_JetsonNano/python/examples/inkslab-eink-tcg-display
-git pull
+cd ~/inkslab
+sudo git pull
 sudo cp inkslab.service inkslab_web.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl restart inkslab inkslab_web
@@ -249,7 +245,8 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Problem | Fix |
 |---------|-----|
 | Can't find the dashboard | The IP is shown on the e-ink display at boot. If you missed it, restart the `inkslab` service or run `hostname -I` on the Pi. You can also check your router's admin page. |
-| Display not updating | Check SPI is enabled: `ls /dev/spi*` should show devices. Check logs: `journalctl -u inkslab -f` |
+| SSH disconnected after starting services | Normal if the Pi had no WiFi configured — the InkSlab-Setup hotspot started. Check your phone's WiFi settings for `InkSlab-Setup`. If this happens unexpectedly, check `journalctl -u inkslab_web -n 30` for errors. |
+| Display not updating | Check SPI is enabled: `ls /dev/spi*` should show devices. Check service status: `sudo systemctl status inkslab`. Check logs: `journalctl -u inkslab -n 50` |
 | Washed-out colors | Increase **Color Saturation** in the Settings tab (default 2.5, try 3.0–4.0) |
 | Web dashboard not loading | Run `journalctl -u inkslab_web -f` to check for errors |
 | Collection mode shows nothing | Mark some cards as owned in the Collection tab first |
