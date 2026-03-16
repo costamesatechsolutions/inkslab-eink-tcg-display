@@ -84,7 +84,8 @@ if [ "$NEEDS_REPAIR" = true ]; then
         chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
     fi
 
-    # Update service files if they changed
+    # Update service files — unmask first so cp doesn't write to /dev/null
+    systemctl unmask inkslab inkslab_web 2>/dev/null
     if [ -f "$SCRIPT_DIR/inkslab.service" ]; then
         cp "$SCRIPT_DIR/inkslab.service" /etc/systemd/system/inkslab.service 2>/dev/null
     fi

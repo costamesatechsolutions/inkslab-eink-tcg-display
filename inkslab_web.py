@@ -1711,6 +1711,9 @@ WIFI_SETUP_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>InkSlab WiFi Setup</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #132E3E; color: #D8E6E4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
@@ -1927,6 +1930,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>InkSlab</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #010001; color: #D8E6E4; min-height: 100vh; display: flex; flex-direction: column; }
@@ -3311,18 +3317,26 @@ if __name__ == '__main__':
     _logger = logging.getLogger(__name__)
     _logger.info("InkSlab Web Dashboard starting...")
 
-    # Enter setup mode if WiFi is not connected AND no saved profile exists.
-    # If a profile exists but WiFi is temporarily down (router reboot etc),
-    # don't tear it down — just serve the dashboard normally.
-    # Note: failed connection attempts now clean up their profiles, so stale
-    # profiles from bad passwords won't block re-entering setup mode.
+    # Give NetworkManager time to initialize on slow Pi Zero
+    import time as _time
+    _time.sleep(3)
+
+    # Check WiFi: saved profile is the primary signal. If a profile exists,
+    # NEVER start the hotspot — WiFi will auto-connect within seconds.
+    # Only enter setup mode if there's genuinely no saved profile.
     try:
-        if not wifi_manager.is_wifi_connected() and not wifi_manager.has_saved_wifi_profile():
+        has_profile = wifi_manager.has_saved_wifi_profile()
+        is_connected = wifi_manager.is_wifi_connected()
+        _logger.info("WiFi check: connected=%s, has_profile=%s", is_connected, has_profile)
+
+        if has_profile:
+            _logger.info("WiFi profile exists — serving dashboard (connected=%s)", is_connected)
+        elif not is_connected:
             _wifi_setup_mode = True
             _logger.info("No WiFi profile found — entering setup mode")
             wifi_manager.start_hotspot()
         else:
-            _logger.info("WiFi configured — serving dashboard")
+            _logger.info("WiFi connected — serving dashboard")
     except Exception as e:
         _logger.warning("WiFi check failed, skipping setup mode: %s", e)
 

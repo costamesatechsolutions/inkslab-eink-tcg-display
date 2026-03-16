@@ -118,6 +118,7 @@ cd ~/inkslab
 ### Step 3 — Start the Services
 
 ```bash
+sudo systemctl unmask inkslab inkslab_web 2>/dev/null
 sudo cp ~/inkslab/inkslab.service /etc/systemd/system/
 sudo cp ~/inkslab/inkslab_web.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -131,16 +132,7 @@ Verify both services started successfully:
 sudo systemctl status inkslab inkslab_web
 ```
 
-Both should show `active (running)`. If either shows `failed` or `masked`, run:
-
-```bash
-sudo systemctl unmask inkslab inkslab_web
-sudo cp ~/inkslab/inkslab.service /etc/systemd/system/
-sudo cp ~/inkslab/inkslab_web.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable inkslab inkslab_web
-sudo systemctl start inkslab inkslab_web
-```
+Both should show `active (running)`.
 
 Check the logs for details:
 
