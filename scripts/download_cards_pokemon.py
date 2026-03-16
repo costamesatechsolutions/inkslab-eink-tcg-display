@@ -71,7 +71,7 @@ def main():
     print("1. Fetching master set list...")
 
     try:
-        r = requests.get(SETS_URL, headers=HEADERS)
+        r = requests.get(SETS_URL, headers=HEADERS, timeout=30)
         sets = r.json()
     except Exception as e:
         print(f"Error fetching sets: {e}")
@@ -108,7 +108,7 @@ def main():
         print(f"[{i + 1}/{total_sets}] {set_name}...")
 
         try:
-            r = requests.get(f"{CARDS_BASE_URL}{set_id}.json", headers=HEADERS)
+            r = requests.get(f"{CARDS_BASE_URL}{set_id}.json", headers=HEADERS, timeout=30)
             cards = r.json()
         except Exception:
             print(f"  > Error fetching card list. Skipping.")

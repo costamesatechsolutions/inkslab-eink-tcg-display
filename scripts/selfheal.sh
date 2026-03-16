@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CRITICAL_FILES="inkslab.py inkslab_web.py wifi_manager.py"
 NEEDS_REPAIR=false
 
-cd "$SCRIPT_DIR" || exit 0
+cd "$SCRIPT_DIR" || { echo "selfheal: Cannot find $SCRIPT_DIR"; exit 1; }
 
 # Fix "dubious ownership" error — service runs as root but repo is owned by pi
 git config --global safe.directory "$SCRIPT_DIR" 2>/dev/null

@@ -124,7 +124,10 @@ if [ $? -ne 0 ]; then
     fi
 fi
 
-# Stage 2.75: Update service files if they changed
+# Stage 2.75: Update service files
+# Unmask FIRST — if masked, the service file is a symlink to /dev/null,
+# and cp would follow the symlink (writing to /dev/null, not replacing it)
+systemctl unmask inkslab inkslab_web 2>/dev/null
 if [ -f "$SCRIPT_DIR/inkslab.service" ]; then
     cp "$SCRIPT_DIR/inkslab.service" /etc/systemd/system/inkslab.service 2>/dev/null
 fi
@@ -132,9 +135,6 @@ if [ -f "$SCRIPT_DIR/inkslab_web.service" ]; then
     cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service 2>/dev/null
 fi
 systemctl daemon-reload 2>/dev/null
-
-# Safety net: unmask services in case they got into a masked state
-systemctl unmask inkslab inkslab_web 2>/dev/null
 
 # Stage 3: Restart display daemon
 write_status "restarting_display" "Restarting display service..." ""

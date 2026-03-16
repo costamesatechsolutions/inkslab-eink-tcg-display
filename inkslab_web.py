@@ -250,6 +250,25 @@ def api_get_config():
 @app.route('/api/config', methods=['POST'])
 def api_set_config():
     updates = request.get_json(force=True)
+    # Validate values to prevent bad config from crashing the display daemon
+    if 'day_interval' in updates:
+        updates['day_interval'] = max(10, min(86400, int(updates['day_interval'])))
+    if 'night_interval' in updates:
+        updates['night_interval'] = max(10, min(86400, int(updates['night_interval'])))
+    if 'day_start' in updates:
+        updates['day_start'] = max(0, min(23, int(updates['day_start'])))
+    if 'day_end' in updates:
+        updates['day_end'] = max(0, min(23, int(updates['day_end'])))
+    if 'color_saturation' in updates:
+        updates['color_saturation'] = max(0.0, min(10.0, float(updates['color_saturation'])))
+    if 'rotation_angle' in updates:
+        updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (0, 90, 180, 270) else 270
+    if 'active_tcg' in updates:
+        if updates['active_tcg'] not in ('pokemon', 'mtg', 'lorcana', 'custom'):
+            updates['active_tcg'] = 'pokemon'
+    if 'slab_header_mode' in updates:
+        if updates['slab_header_mode'] not in ('normal', 'inverted', 'off'):
+            updates['slab_header_mode'] = 'normal'
     with _config_lock:
         config = load_config()
         for key in DEFAULTS:
