@@ -13,6 +13,14 @@ cd "$SCRIPT_DIR" || exit 0
 # Fix "dubious ownership" error — service runs as root but repo is owned by pi
 git config --global safe.directory "$SCRIPT_DIR" 2>/dev/null
 
+# Ensure ~/inkslab symlink exists (for migration from old deep-nested paths)
+INKSLAB_HOME="/home/pi/inkslab"
+if [ "$SCRIPT_DIR" != "$INKSLAB_HOME" ] && [ ! -e "$INKSLAB_HOME" ]; then
+    ln -sfn "$SCRIPT_DIR" "$INKSLAB_HOME"
+    chown -h pi:pi "$INKSLAB_HOME" 2>/dev/null
+    echo "selfheal: Created symlink $INKSLAB_HOME -> $SCRIPT_DIR"
+fi
+
 # Check each critical file exists and is non-empty
 for f in $CRITICAL_FILES; do
     if [ ! -s "$SCRIPT_DIR/$f" ]; then

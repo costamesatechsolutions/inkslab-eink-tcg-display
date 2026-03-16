@@ -118,8 +118,8 @@ cd ~/inkslab
 ### Step 3 — Start the Services
 
 ```bash
-sudo cp inkslab.service /etc/systemd/system/
-sudo cp inkslab_web.service /etc/systemd/system/
+sudo cp ~/inkslab/inkslab.service /etc/systemd/system/
+sudo cp ~/inkslab/inkslab_web.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable inkslab inkslab_web
 sudo systemctl start inkslab inkslab_web
@@ -131,7 +131,18 @@ Verify both services started successfully:
 sudo systemctl status inkslab inkslab_web
 ```
 
-Both should show `active (running)`. If either shows `failed`, check the logs:
+Both should show `active (running)`. If either shows `failed` or `masked`, run:
+
+```bash
+sudo systemctl unmask inkslab inkslab_web
+sudo cp ~/inkslab/inkslab.service /etc/systemd/system/
+sudo cp ~/inkslab/inkslab_web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable inkslab inkslab_web
+sudo systemctl start inkslab inkslab_web
+```
+
+Check the logs for details:
 
 ```bash
 journalctl -u inkslab -n 50
@@ -189,7 +200,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ssh pi@<your-pi-ip>
 cd ~/inkslab
 sudo git pull
-sudo cp inkslab.service inkslab_web.service /etc/systemd/system/
+sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl restart inkslab inkslab_web
 ```
@@ -250,6 +261,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Washed-out colors | Increase **Color Saturation** in the Settings tab (default 2.5, try 3.0–4.0) |
 | Web dashboard not loading | Run `journalctl -u inkslab_web -f` to check for errors |
 | Collection mode shows nothing | Mark some cards as owned in the Collection tab first |
+| Services show "masked" | Run: `sudo systemctl unmask inkslab inkslab_web && sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable inkslab inkslab_web && sudo systemctl start inkslab inkslab_web` |
 | Download fails or stalls | The Pi Zero has limited RAM. If a massive download (MTG or Pokemon) stalls out, click "Stop Download" and then start it again. It will safely skip over existing files and resume exactly where it left off. |
 | OTA update stuck | If the update progress bar stalls, wait 60 seconds then refresh the page. The services auto-restart via systemd. |
 | WiFi setup not appearing | Make sure you're connected to the `InkSlab-Setup` network. If the setup page doesn't auto-open, go to `http://10.42.0.1` manually. |

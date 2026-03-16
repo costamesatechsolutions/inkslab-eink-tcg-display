@@ -102,6 +102,13 @@ fi
 # Fix file ownership — OTA runs as root but pi user needs to own these files
 chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
 
+# Ensure ~/inkslab symlink exists (for migration from old deep-nested paths)
+INKSLAB_HOME="/home/pi/inkslab"
+if [ "$SCRIPT_DIR" != "$INKSLAB_HOME" ] && [ ! -e "$INKSLAB_HOME" ]; then
+    ln -sfn "$SCRIPT_DIR" "$INKSLAB_HOME"
+    chown -h pi:pi "$INKSLAB_HOME" 2>/dev/null
+fi
+
 # Stage 2.5: Verify critical files are intact
 write_status "pulling" "Verifying update..." ""
 VERIFY_RESULT=$(verify_files)
@@ -125,6 +132,9 @@ if [ -f "$SCRIPT_DIR/inkslab_web.service" ]; then
     cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service 2>/dev/null
 fi
 systemctl daemon-reload 2>/dev/null
+
+# Safety net: unmask services in case they got into a masked state
+systemctl unmask inkslab inkslab_web 2>/dev/null
 
 # Stage 3: Restart display daemon
 write_status "restarting_display" "Restarting display service..." ""
