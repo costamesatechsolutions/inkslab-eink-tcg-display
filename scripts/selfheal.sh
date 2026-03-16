@@ -84,12 +84,13 @@ if [ "$NEEDS_REPAIR" = true ]; then
         chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
     fi
 
-    # Update service files — unmask first so cp doesn't write to /dev/null
-    systemctl unmask inkslab inkslab_web 2>/dev/null
+    # Update service files — rm -f first to handle masked symlinks (cp follows them)
     if [ -f "$SCRIPT_DIR/inkslab.service" ]; then
+        rm -f /etc/systemd/system/inkslab.service
         cp "$SCRIPT_DIR/inkslab.service" /etc/systemd/system/inkslab.service 2>/dev/null
     fi
     if [ -f "$SCRIPT_DIR/inkslab_web.service" ]; then
+        rm -f /etc/systemd/system/inkslab_web.service
         cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service 2>/dev/null
     fi
     systemctl daemon-reload 2>/dev/null

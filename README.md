@@ -115,26 +115,21 @@ git clone https://github.com/costamesatechsolutions/inkslab-eink-tcg-display.git
 cd ~/inkslab
 ```
 
-### Step 3 — Start the Services
+### Step 3 — Run Setup
 
 ```bash
-sudo systemctl unmask inkslab inkslab_web 2>/dev/null
-sudo cp ~/inkslab/inkslab.service /etc/systemd/system/
-sudo cp ~/inkslab/inkslab_web.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable inkslab inkslab_web
-sudo systemctl start inkslab inkslab_web
+sudo bash ~/inkslab/scripts/setup.sh
 ```
 
-Verify both services started successfully:
+This installs dependencies, configures the services, and reboots. Your SSH session will disconnect — reconnect after ~30 seconds.
+
+After reconnecting, verify both services are running:
 
 ```bash
 sudo systemctl status inkslab inkslab_web
 ```
 
-Both should show `active (running)`.
-
-Check the logs for details:
+Both should show `active (running)`. Check logs if needed:
 
 ```bash
 journalctl -u inkslab -n 50
@@ -253,7 +248,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Washed-out colors | Increase **Color Saturation** in the Settings tab (default 2.5, try 3.0–4.0) |
 | Web dashboard not loading | Run `journalctl -u inkslab_web -f` to check for errors |
 | Collection mode shows nothing | Mark some cards as owned in the Collection tab first |
-| Services show "masked" | Run: `sudo systemctl unmask inkslab inkslab_web && sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable inkslab inkslab_web && sudo systemctl start inkslab inkslab_web` |
+| Services show "masked" | Run: `sudo bash ~/inkslab/scripts/setup.sh` (this removes masked symlinks, installs fresh service files, and reboots) |
 | Download fails or stalls | The Pi Zero has limited RAM. If a massive download (MTG or Pokemon) stalls out, click "Stop Download" and then start it again. It will safely skip over existing files and resume exactly where it left off. |
 | OTA update stuck | If the update progress bar stalls, wait 60 seconds then refresh the page. The services auto-restart via systemd. |
 | WiFi setup not appearing | Make sure you're connected to the `InkSlab-Setup` network. If the setup page doesn't auto-open, go to `http://10.42.0.1` manually. |
@@ -277,6 +272,7 @@ inkslab-eink-tcg-display/
     download_cards_pokemon.py    # Pokemon card downloader
     download_cards_mtg.py        # MTG card downloader (Scryfall API)
     download_cards_lorcana.py    # Lorcana card downloader (Lorcast API)
+    setup.sh                     # First-time setup (installs services + reboots)
     ota_update.sh                # OTA update script (git pull + service restart)
     selfheal.sh                  # Self-healer: runs before each service start, fixes broken states
 ```
