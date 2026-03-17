@@ -57,6 +57,7 @@ PAUSE_FILE = "/tmp/inkslab_pause"
 COLLECTION_TRIGGER = "/tmp/inkslab_collection_changed"
 WIFI_CONNECTED_TRIGGER = "/tmp/inkslab_wifi_connected"
 WIFI_SETUP_TRIGGER = "/tmp/inkslab_wifi_setup"
+WIFI_FAILED_TRIGGER = "/tmp/inkslab_wifi_failed"
 UNBOX_TRIGGER = "/tmp/inkslab_unbox"
 
 # Graceful shutdown flag (module-level so wait_with_polling can check it)
@@ -362,6 +363,81 @@ def show_setup_screen(epd, config):
 
     except Exception as e:
         logger.warning(f"Setup screen skipped: {e}")
+        try:
+            epd.sleep()
+        except Exception:
+            pass
+
+
+def show_wifi_failed_screen(epd, config, ssid=""):
+    """Show a WiFi connection failure message on the e-ink display."""
+    try:
+        canvas = Image.new("RGB", (DISPLAY_WIDTH, DISPLAY_HEIGHT), (255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+
+        try:
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+            font_heading = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            font_body = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+            font_url = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+        except Exception:
+            font_title = ImageFont.load_default()
+            font_heading = font_title
+            font_body = font_title
+            font_url = font_title
+            font_small = font_title
+
+        cx = DISPLAY_WIDTH // 2
+
+        draw.text((cx, 50), "Connection Failed", fill=(255, 0, 0), font=font_title, anchor="mm")
+
+        if ssid:
+            draw.text((cx, 100), f"Could not connect to:", fill=(0, 0, 0), font=font_body, anchor="mm")
+            # Truncate long SSIDs
+            display_ssid = ssid if len(ssid) <= 24 else ssid[:21] + "..."
+            draw.text((cx, 130), display_ssid, fill=(0, 0, 0), font=font_heading, anchor="mm")
+        else:
+            draw.text((cx, 115), "Could not connect to WiFi.", fill=(0, 0, 0), font=font_body, anchor="mm")
+
+        draw.text((cx, 185), "Check your password", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 215), "and try again.", fill=(0, 0, 0), font=font_body, anchor="mm")
+
+        draw.text((cx, 290), "To retry:", fill=(0, 0, 255), font=font_heading, anchor="mm")
+
+        # WiFi QR to rejoin hotspot
+        wifi_qr = make_qr("WIFI:T:nopass;S:InkSlab-Setup;;", box_size=3, border=1)
+        if wifi_qr:
+            qr_size = min(wifi_qr.size[0], 110)
+            wifi_qr = wifi_qr.resize((qr_size, qr_size), Image.Resampling.NEAREST)
+            canvas.paste(wifi_qr, (cx - qr_size // 2, 320))
+            wifi_qr.close()
+
+        draw.text((cx, 450), "Scan to rejoin InkSlab-Setup", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 478), "or connect manually, then", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 506), "open the setup page to retry.", fill=(0, 0, 0), font=font_body, anchor="mm")
+
+        draw.text((cx, 555), "Costa Mesa Tech Solutions", fill=(0, 0, 0), font=font_small, anchor="mm")
+
+        img = ImageEnhance.Contrast(canvas).enhance(CONTRAST_BOOST)
+        canvas.close()
+        palette_ref = create_palette_image()
+        img_dithered = img.quantize(palette=palette_ref, dither=Image.Dither.FLOYDSTEINBERG)
+        img.close()
+        palette_ref.close()
+        img_rgb = img_dithered.convert("RGB")
+        img_dithered.close()
+        final = img_rgb.rotate(config["rotation_angle"], expand=True)
+        img_rgb.close()
+
+        epd.init()
+        epd.display(epd.getbuffer(final))
+        epd.sleep()
+        final.close()
+        logger.info(f"WiFi failed screen shown for SSID: {ssid}")
+
+    except Exception as e:
+        logger.warning(f"WiFi failed screen skipped: {e}")
         try:
             epd.sleep()
         except Exception:
@@ -814,6 +890,17 @@ def wait_with_polling(seconds, config_check_interval=5):
             logger.info("WiFi connected trigger detected")
             return load_config(), "wifi_connected"
 
+        if os.path.exists(WIFI_FAILED_TRIGGER):
+            ssid = ""
+            try:
+                with open(WIFI_FAILED_TRIGGER, 'r') as f:
+                    ssid = f.read().strip()
+                os.remove(WIFI_FAILED_TRIGGER)
+            except OSError:
+                pass
+            logger.info(f"WiFi failed trigger detected for SSID: {ssid}")
+            return load_config(), ("wifi_failed", ssid)
+
         if os.path.exists(WIFI_SETUP_TRIGGER):
             try:
                 os.remove(WIFI_SETUP_TRIGGER)
@@ -996,6 +1083,11 @@ def main():
                 config, action = wait_with_polling(60)
 
                 # Handle WiFi state changes even while waiting for cards
+                if isinstance(action, tuple) and action[0] == "wifi_failed":
+                    show_wifi_failed_screen(epd, config, ssid=action[1])
+                    _no_cards_shown = False
+                    continue
+
                 if action == "wifi_setup":
                     show_setup_screen(epd, config)
                     while not os.path.exists(WIFI_CONNECTED_TRIGGER) and not _shutdown:
@@ -1156,6 +1248,12 @@ def main():
                         previous = deck.history.pop(0)
                         deck.deck.insert(0, current)
                         deck.deck.insert(0, previous)
+                    continue
+
+                # WiFi failed — show error screen, then resume waiting
+                if isinstance(action, tuple) and action[0] == "wifi_failed":
+                    show_wifi_failed_screen(epd, config, ssid=action[1])
+                    time.sleep(EINK_RENDER_WAIT)
                     continue
 
                 # WiFi connected — show splash screen with new IP, then resume cards

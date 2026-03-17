@@ -1257,11 +1257,16 @@ def _perform_wifi_connection(ssid, password):
             except OSError:
                 pass
         else:
-            # Connection failed — restore hotspot
+            # Connection failed — restore hotspot and signal e-ink display
             with _wifi_connect_lock:
                 _wifi_connect_result = {
                     "status": "failed", "error": message, "ssid": ssid,
                 }
+            try:
+                with open("/tmp/inkslab_wifi_failed", "w") as f:
+                    f.write(ssid)
+            except OSError:
+                pass
             wifi_manager.start_hotspot()
             _wifi_setup_mode = True
     except Exception as e:
@@ -1269,6 +1274,11 @@ def _perform_wifi_connection(ssid, password):
             _wifi_connect_result = {
                 "status": "failed", "error": str(e), "ssid": ssid,
             }
+        try:
+            with open("/tmp/inkslab_wifi_failed", "w") as f:
+                f.write(ssid)
+        except OSError:
+            pass
         try:
             wifi_manager.start_hotspot()
             _wifi_setup_mode = True
