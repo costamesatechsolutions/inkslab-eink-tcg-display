@@ -1916,14 +1916,12 @@ function doConnect() {
         return;
       }
     } catch(e) {}
-    document.getElementById('connect-form').innerHTML =
-      '<div style="text-align:center;padding:20px;line-height:1.8">'
-      + '<div class="spinner"></div>'
-      + '<p style="color:#36A5CA;font-size:16px;margin:12px 0">Connecting...</p>'
-      + '<p style="color:#D8E6E4;font-size:14px">This page will stop responding.</p>'
-      + '<p style="color:#FCFDF0;font-size:15px;margin-top:16px">Check the e-ink display for the result.</p>'
-      + '<p style="color:#6BCCBD;font-size:13px;margin-top:12px">If password was wrong, reconnect to<br>InkSlab-Setup WiFi to retry.</p>'
-      + '</div>';
+    /* Keep it simple — just update text, no innerHTML replacement.
+       This avoids browser crashes when the network drops mid-render. */
+    sa.textContent = 'Connecting... Check the e-ink display for the result. If password was wrong, reconnect to InkSlab-Setup WiFi to retry.';
+    sa.style.color = '#6BCCBD';
+    sa.style.fontSize = '14px';
+    sa.style.lineHeight = '1.6';
   };
   x.onerror = function() {
     sa.textContent = 'Request failed. Try again.';
@@ -2681,12 +2679,12 @@ function factoryReset(btn) {
 }
 
 function changeWifi() {
-  if (!confirm('This will disconnect WiFi and start the setup hotspot.\\n\\nAfter this:\\n1. On your phone, go to Settings > WiFi\\n2. Connect to "InkSlab-Setup"\\n3. Open 10.42.0.1 in your web browser (Safari, Chrome, etc.)\\n\\nContinue?')) return;
+  if (!confirm('This will disconnect WiFi and start the setup hotspot.\\n\\nAfter this:\\n1. On your phone, go to Settings > WiFi\\n2. Connect to "InkSlab-Setup"\\n3. Open 10.42.0.1 in your browser\\n\\nContinue?')) return;
+  // Show feedback IMMEDIATELY — don't wait for response (WiFi drops any moment)
   var el = document.getElementById('wifi-info');
-  fetch(API + '/api/wifi/disconnect', {method:'POST'}).then(function() {
-    el.innerHTML = '<strong>Setup mode active</strong><br>1. On your phone, go to WiFi settings and connect to <strong>InkSlab-Setup</strong><br>2. Open <strong>http://10.42.0.1</strong> in your web browser';
-    showToast('Setup hotspot started!', 3000);
-  }).catch(function() { showToast('Failed to start WiFi setup'); });
+  el.innerHTML = '<strong style="color:#36A5CA">Switching to setup mode...</strong><br><br>1. Connect to <strong>InkSlab-Setup</strong> WiFi<br>2. Open <strong>10.42.0.1</strong> in your browser';
+  showToast('Starting setup hotspot...', 5000);
+  fetch(API + '/api/wifi/disconnect', {method:'POST'}).catch(function() {});
 }
 
 // --- Collection ---

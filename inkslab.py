@@ -400,22 +400,22 @@ def show_wifi_failed_screen(epd, config, ssid=""):
         else:
             draw.text((cx, 115), "Could not connect to WiFi.", fill=(0, 0, 0), font=font_body, anchor="mm")
 
-        draw.text((cx, 185), "Check your password", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 215), "and try again.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 180), "Check your password and try again.", fill=(0, 0, 0), font=font_body, anchor="mm")
 
-        draw.text((cx, 290), "To retry:", fill=(0, 0, 255), font=font_heading, anchor="mm")
+        draw.text((cx, 240), "To retry:", fill=(0, 0, 255), font=font_heading, anchor="mm")
+        draw.text((cx, 275), "1. Connect to InkSlab-Setup WiFi", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 305), "2. Open your browser and go to:", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 345), "10.42.0.1", fill=(0, 0, 255), font=font_url, anchor="mm")
 
         # WiFi QR to rejoin hotspot
         wifi_qr = make_qr("WIFI:T:nopass;S:InkSlab-Setup;;", box_size=3, border=1)
         if wifi_qr:
-            qr_size = min(wifi_qr.size[0], 110)
+            qr_size = min(wifi_qr.size[0], 100)
             wifi_qr = wifi_qr.resize((qr_size, qr_size), Image.Resampling.NEAREST)
-            canvas.paste(wifi_qr, (cx - qr_size // 2, 320))
+            canvas.paste(wifi_qr, (cx - qr_size // 2, 385))
             wifi_qr.close()
 
-        draw.text((cx, 450), "Scan to rejoin InkSlab-Setup", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 478), "or connect manually, then", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 506), "open the setup page to retry.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 510), "Scan to rejoin InkSlab-Setup", fill=(0, 0, 0), font=font_small, anchor="mm")
 
         draw.text((cx, 555), "Costa Mesa Tech Solutions", fill=(0, 0, 0), font=font_small, anchor="mm")
 
@@ -1004,10 +1004,10 @@ def main():
         else:
             logger.info("WiFi connected but no cards — skipping splash, will show no-cards screen")
     else:
-        # Not connected — show setup instructions and wait
-        # (Covers both first boot AND failed previous connection attempts)
+        # Not connected — show setup instructions and wait for trigger file only.
+        # Do NOT use is_wifi_connected() — hotspot registers as "connected" too.
         show_setup_screen(epd, config)
-        logger.info("No WiFi connection — showing setup screen, waiting...")
+        logger.info("No WiFi connection — showing setup screen, waiting for trigger...")
         wait_count = 0
         max_wait = 600  # Give up after 10 minutes and proceed anyway
         while wait_count < max_wait:
@@ -1017,11 +1017,16 @@ def main():
                 except OSError:
                     pass
                 break
-            try:
-                if wifi_manager.is_wifi_connected():
-                    break
-            except Exception:
-                break  # WiFi check crashed — proceed anyway
+            if os.path.exists(WIFI_FAILED_TRIGGER):
+                ssid = ""
+                try:
+                    with open(WIFI_FAILED_TRIGGER, 'r') as f:
+                        ssid = f.read().strip()
+                    os.remove(WIFI_FAILED_TRIGGER)
+                except OSError:
+                    pass
+                show_wifi_failed_screen(epd, config, ssid=ssid)
+                # Don't increment wait_count — keep waiting for success
             time.sleep(5)
             wait_count += 5
         # WiFi connected — skip splash if no cards (no-cards screen shows IP)
@@ -1106,17 +1111,10 @@ def main():
                             except OSError:
                                 pass
                             show_wifi_failed_screen(epd, config, ssid=ssid)
-                            continue
-                        try:
-                            if wifi_manager.is_wifi_connected():
-                                break
-                        except Exception:
-                            break
+                        # Do NOT check is_wifi_connected() here — hotspot
+                        # registers as "connected" and breaks the loop early
                         time.sleep(3)
-                    # Always show splash after WiFi connects (shows IP + QR)
-                    if not _shutdown:
-                        show_splash_screen(epd, config)
-                        time.sleep(EINK_RENDER_WAIT)
+                    # No splash — the no-cards screen shows IP + QR anyway
                     _no_cards_shown = False
                     continue
 
@@ -1299,12 +1297,6 @@ def main():
                             except OSError:
                                 pass
                             show_wifi_failed_screen(epd, config, ssid=ssid)
-                            continue
-                        try:
-                            if wifi_manager.is_wifi_connected():
-                                break
-                        except Exception:
-                            break
                         time.sleep(3)
                     show_splash_screen(epd, config)
                     time.sleep(EINK_RENDER_WAIT)
