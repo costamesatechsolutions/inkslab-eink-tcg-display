@@ -1106,7 +1106,6 @@ def main():
                             except OSError:
                                 pass
                             show_wifi_failed_screen(epd, config, ssid=ssid)
-                            # Keep waiting — user will retry
                             continue
                         try:
                             if wifi_manager.is_wifi_connected():
@@ -1114,6 +1113,10 @@ def main():
                         except Exception:
                             break
                         time.sleep(3)
+                    # Always show splash after WiFi connects (shows IP + QR)
+                    if not _shutdown:
+                        show_splash_screen(epd, config)
+                        time.sleep(EINK_RENDER_WAIT)
                     _no_cards_shown = False
                     continue
 
