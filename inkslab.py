@@ -1090,17 +1090,30 @@ def main():
 
                 if action == "wifi_setup":
                     show_setup_screen(epd, config)
-                    while not os.path.exists(WIFI_CONNECTED_TRIGGER) and not _shutdown:
+                    while not _shutdown:
+                        if os.path.exists(WIFI_CONNECTED_TRIGGER):
+                            try:
+                                os.remove(WIFI_CONNECTED_TRIGGER)
+                            except OSError:
+                                pass
+                            break
+                        if os.path.exists(WIFI_FAILED_TRIGGER):
+                            ssid = ""
+                            try:
+                                with open(WIFI_FAILED_TRIGGER, 'r') as f:
+                                    ssid = f.read().strip()
+                                os.remove(WIFI_FAILED_TRIGGER)
+                            except OSError:
+                                pass
+                            show_wifi_failed_screen(epd, config, ssid=ssid)
+                            # Keep waiting — user will retry
+                            continue
                         try:
                             if wifi_manager.is_wifi_connected():
                                 break
                         except Exception:
                             break
-                        time.sleep(5)
-                    try:
-                        os.remove(WIFI_CONNECTED_TRIGGER)
-                    except OSError:
-                        pass
+                        time.sleep(3)
                     _no_cards_shown = False
                     continue
 
@@ -1274,12 +1287,22 @@ def main():
                             except OSError:
                                 pass
                             break
+                        if os.path.exists(WIFI_FAILED_TRIGGER):
+                            ssid = ""
+                            try:
+                                with open(WIFI_FAILED_TRIGGER, 'r') as f:
+                                    ssid = f.read().strip()
+                                os.remove(WIFI_FAILED_TRIGGER)
+                            except OSError:
+                                pass
+                            show_wifi_failed_screen(epd, config, ssid=ssid)
+                            continue
                         try:
                             if wifi_manager.is_wifi_connected():
                                 break
                         except Exception:
                             break
-                        time.sleep(5)
+                        time.sleep(3)
                     show_splash_screen(epd, config)
                     time.sleep(EINK_RENDER_WAIT)
                     continue

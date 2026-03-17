@@ -1722,10 +1722,8 @@ WIFI_SETUP_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<title>InkSlab WiFi Setup</title>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<title>InkSlab WiFi Setup</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #132E3E; color: #D8E6E4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
@@ -1792,7 +1790,7 @@ body { background: #132E3E; color: #D8E6E4; font-family: -apple-system, BlinkMac
       <button class="btn btn-secondary btn-sm" onclick="scanNetworks()">Scan</button>
     </div>
     <div class="network-list" id="network-list">
-      <div style="text-align:center;padding:24px;color:#6BCCBD">Scanning...</div>
+      <div style="text-align:center;padding:24px;color:#6BCCBD"><div class="spinner"></div><br>Loading networks...</div>
     </div>
   </div>
 
@@ -1882,27 +1880,28 @@ function togglePw() {
 }
 
 var _failCount = 0;
+var _sa = null;
+function sa() { if (!_sa) _sa = document.getElementById('status-area'); return _sa; }
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function showError(msg) {
+  sa().innerHTML = '<div class="error-msg">' + esc(msg) + '</div>';
+  document.getElementById('btn-connect').disabled = false;
+}
 
 function doConnect() {
   var password = document.getElementById('wifi-password').value;
   document.getElementById('btn-connect').disabled = true;
   _failCount = 0;
-  document.getElementById('status-area').innerHTML = '<div class="spinner"></div><div style="color:#36A5CA">Connecting to ' + selectedSSID + '...</div>';
+  sa().innerHTML = '<div class="spinner"></div><div style="color:#36A5CA">Connecting...</div>';
   fetch('/api/wifi/connect', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ssid: selectedSSID, password: password})
   }).then(function(r) { return r.json(); }).then(function(d) {
-    if (!d.ok) {
-      document.getElementById('status-area').innerHTML = '<div class="error-msg">' + (d.error || 'Failed') + '</div>';
-      document.getElementById('btn-connect').disabled = false;
-      return;
-    }
-    _statusPoll = setInterval(checkConnectStatus, 2000);
-  }).catch(function() {
-    document.getElementById('status-area').innerHTML = '<div class="error-msg">Request failed. Try again.</div>';
-    document.getElementById('btn-connect').disabled = false;
-  });
+    if (!d.ok) { showError(d.error || 'Failed'); return; }
+    _statusPoll = setInterval(checkConnectStatus, 2500);
+  }).catch(function() { showError('Request failed. Try again.'); });
 }
 
 function checkConnectStatus() {
@@ -1911,48 +1910,39 @@ function checkConnectStatus() {
     var cs = d.connect_status;
     if (cs.status === 'success') {
       clearInterval(_statusPoll); _statusPoll = null;
-      showSuccess(cs.ip, cs.ssid);
+      document.getElementById('setup-content').innerHTML =
+        '<div class="success-screen">'
+        + '<div class="check">&#10004;</div>'
+        + '<h2>Connected!</h2>'
+        + '<p style="color:#D8E6E4;font-size:15px">Open the address shown on the e-ink display.</p>'
+        + '<div class="ip">http://' + esc(cs.ip) + '</div>'
+        + '</div>';
     } else if (cs.status === 'failed') {
       clearInterval(_statusPoll); _statusPoll = null;
-      document.getElementById('status-area').innerHTML = '<div class="error-msg" style="font-size:15px;line-height:1.5">' + (cs.error || 'Connection failed.') + '<br><br>Check your password and tap Connect to try again.</div>';
-      document.getElementById('btn-connect').disabled = false;
+      showError(cs.error || 'Connection failed. Check your password.');
     }
   }).catch(function() {
     _failCount++;
-    if (_failCount >= 4) {
+    if (_failCount >= 3) {
       clearInterval(_statusPoll); _statusPoll = null;
-      document.getElementById('status-area').innerHTML =
-        '<div style="color:#6BCCBD;font-size:14px;line-height:1.6;text-align:left;padding:8px">'
-        + '<strong style="color:#FCFDF0">Your phone disconnected</strong> (this is normal).<br><br>'
-        + '<strong style="color:#6BCCBD">If it worked:</strong> Check the e-ink display &#8212; it will show your new dashboard address.<br><br>'
-        + '<strong style="color:#ff6b6b">If password was wrong:</strong><br>'
-        + '1. Reconnect to <strong>InkSlab-Setup</strong> WiFi<br>'
-        + '2. Open <strong>10.42.0.1</strong> in your browser<br>'
-        + '3. The error will be shown and you can retry'
+      sa().innerHTML =
+        '<div style="color:#D8E6E4;font-size:14px;line-height:1.6;padding:8px">'
+        + 'Your phone disconnected (this is normal).'
+        + '<br><br><b>Check the e-ink display.</b>'
+        + '<br>If it shows a new address, you are connected!'
+        + '<br><br>If it shows an error, reconnect to '
+        + '<b>InkSlab-Setup</b> WiFi and try again.'
         + '</div>';
     }
   });
 }
 
-function showSuccess(ip, ssid) {
-  document.getElementById('setup-content').innerHTML =
-    '<div class="success-screen">'
-    + '<div class="check">&#10004;</div>'
-    + '<h2>Connected!</h2>'
-    + '<p style="color:#D8E6E4;font-size:15px;margin-bottom:16px">Your InkSlab is now on <strong>' + ssid.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</strong></p>'
-    + '<div class="ip">http://' + ip.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
-    + '<p>Open this address in your web browser to access the dashboard.</p>'
-    + '<p style="margin-top:20px;color:#36A5CA;font-size:12px">The e-ink display will also show this address.</p>'
-    + '</div>';
-}
-
-// On load: check if a previous connection attempt failed, then scan
+// On load: check for previous failure, then scan
 fetch('/api/wifi/status').then(function(r) { return r.json(); }).then(function(d) {
   var cs = d.connect_status;
   if (cs && cs.status === 'failed') {
-    selectNetwork(cs.ssid || 'Unknown', '');
-    document.getElementById('status-area').innerHTML = '<div class="error-msg" style="font-size:15px;line-height:1.5">' + (cs.error || 'Connection failed.') + '<br><br>Check your password and tap Connect to try again.</div>';
-    document.getElementById('btn-connect').disabled = false;
+    selectNetwork(cs.ssid || '', '');
+    showError(cs.error || 'Previous connection failed. Try again.');
   }
 }).catch(function() {});
 scanNetworks();
@@ -3335,6 +3325,16 @@ function buildDynamicUI(registry) {
 </script>
 </body>
 </html>"""
+
+
+@app.after_request
+def add_no_cache(response):
+    """Prevent browser from caching ANY response — fixes stale JS after OTA updates."""
+    if 'Cache-Control' not in response.headers:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/')
