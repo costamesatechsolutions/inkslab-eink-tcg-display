@@ -313,33 +313,34 @@ def show_setup_screen(epd, config):
         cx = DISPLAY_WIDTH // 2
 
         # Title
-        draw.text((cx, 40), "InkSlab WiFi Setup", fill=(0, 0, 0), font=font_title, anchor="mm")
+        draw.text((cx, 35), "InkSlab WiFi Setup", fill=(0, 0, 0), font=font_title, anchor="mm")
 
-        # Step 1
-        draw.text((cx, 90), "Step 1", fill=(0, 0, 255), font=font_heading, anchor="mm")
-        draw.text((cx, 118), "On your phone, go to Settings", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 141), "and connect to this WiFi:", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 178), "InkSlab-Setup", fill=(255, 0, 0), font=font_url, anchor="mm")
-        draw.text((cx, 206), "(no password needed)", fill=(0, 0, 0), font=font_small, anchor="mm")
+        # Step 1 — QR code to auto-join the hotspot
+        draw.text((cx, 75), "Step 1: Scan to connect", fill=(0, 0, 255), font=font_heading, anchor="mm")
+
+        # WiFi QR code (standard format, works on iOS + Android)
+        wifi_qr = make_qr("WIFI:T:nopass;S:InkSlab-Setup;;", box_size=3, border=1)
+        if wifi_qr:
+            qr_size = min(wifi_qr.size[0], 120)
+            wifi_qr = wifi_qr.resize((qr_size, qr_size), Image.Resampling.NEAREST)
+            canvas.paste(wifi_qr, (cx - qr_size // 2, 100))
+            wifi_qr.close()
+
+        draw.text((cx, 235), "Scan with your phone camera", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 258), "to join the InkSlab-Setup WiFi.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 288), "Or connect manually:", fill=(0, 0, 0), font=font_small, anchor="mm")
+        draw.text((cx, 310), "InkSlab-Setup", fill=(255, 0, 0), font=font_url, anchor="mm")
+        draw.text((cx, 336), "(no password)", fill=(0, 0, 0), font=font_small, anchor="mm")
 
         # Step 2
-        draw.text((cx, 255), "Step 2", fill=(0, 0, 255), font=font_heading, anchor="mm")
-        draw.text((cx, 283), "A setup page should appear.", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 306), "If not, scan this code or", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 329), "type in your web browser:", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 363), "10.42.0.1", fill=(0, 0, 255), font=font_url, anchor="mm")
-
-        # QR code for setup URL
-        qr_img = make_qr("http://10.42.0.1", box_size=3, border=1)
-        if qr_img:
-            qr_size = min(qr_img.size[0], 100)
-            qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
-            canvas.paste(qr_img, (cx - qr_size // 2, 390))
-            qr_img.close()
+        draw.text((cx, 380), "Step 2: Set up your WiFi", fill=(0, 0, 255), font=font_heading, anchor="mm")
+        draw.text((cx, 410), "A setup page will open automatically.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 433), "If not, open your browser and go to:", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 465), "10.42.0.1", fill=(0, 0, 255), font=font_url, anchor="mm")
 
         # Step 3
-        draw.text((cx, 530), "Then pick your WiFi and", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 553), "enter the password.", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 515), "Pick your home WiFi network", fill=(0, 0, 0), font=font_body, anchor="mm")
+        draw.text((cx, 538), "and enter the password.", fill=(0, 0, 0), font=font_body, anchor="mm")
 
         # Process for e-paper display
         img = ImageEnhance.Contrast(canvas).enhance(CONTRAST_BOOST)

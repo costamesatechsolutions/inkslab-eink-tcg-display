@@ -1871,7 +1871,7 @@ function togglePw() {
 function doConnect() {
   var password = document.getElementById('wifi-password').value;
   document.getElementById('btn-connect').disabled = true;
-  document.getElementById('status-area').innerHTML = '<div class="spinner"></div><div style="color:#36A5CA">Connecting to ' + selectedSSID + '...</div>';
+  document.getElementById('status-area').innerHTML = '<div class="spinner"></div><div style="color:#36A5CA">Connecting to ' + selectedSSID + '...</div><div style="color:#6BCCBD;font-size:12px;margin-top:8px">Your phone will briefly disconnect. If the password is wrong, reconnect to InkSlab-Setup and this page will show the error.</div>';
   fetch('/api/wifi/connect', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1918,7 +1918,16 @@ function showSuccess(ip, ssid) {
     + '</div>';
 }
 
-// Auto-scan on load
+// On load: check if a previous connection attempt failed, then scan
+fetch('/api/wifi/status').then(function(r) { return r.json(); }).then(function(d) {
+  var cs = d.connect_status;
+  if (cs && cs.status === 'failed') {
+    // Show the previous failure so user knows what happened
+    selectNetwork(cs.ssid || 'Unknown', '');
+    document.getElementById('status-area').innerHTML = '<div class="error-msg">' + (cs.error || 'Connection failed. Check your password and try again.') + '</div>';
+    document.getElementById('btn-connect').disabled = false;
+  }
+}).catch(function() {});
 scanNetworks();
 </script>
 </body>
