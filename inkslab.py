@@ -748,9 +748,15 @@ def process_image(img_path, master_index, config):
         img, info = create_slab_layout(img_path, master_index, header_mode)
 
         # Boost colors for the e-paper display (each enhance creates a new image)
+        old = img
         img = ImageEnhance.Color(img).enhance(config["color_saturation"])
+        old.close()
+        old = img
         img = ImageEnhance.Contrast(img).enhance(CONTRAST_BOOST)
+        old.close()
+        old = img
         img = ImageEnhance.Sharpness(img).enhance(SHARPNESS_BOOST)
+        old.close()
 
         # Quantize to 7-color palette with dithering
         palette_ref = create_palette_image()
