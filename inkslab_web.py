@@ -1720,6 +1720,8 @@ WIFI_SETUP_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>InkSlab WiFi Setup</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -1781,6 +1783,7 @@ body { background: #132E3E; color: #D8E6E4; font-family: -apple-system, BlinkMac
   <div class="welcome">
     <h2>Welcome!</h2>
     <p>Let's connect your InkSlab to WiFi.</p>
+    <p style="font-size:11px;color:#36A5CA;margin-top:8px">If this popup is glitchy, open <strong>10.42.0.1</strong> in Safari or Chrome instead.</p>
   </div>
 
   <div class="card">
@@ -1878,10 +1881,13 @@ function togglePw() {
   else { inp.type = 'password'; btn.textContent = 'show'; }
 }
 
+var _failCount = 0;
+
 function doConnect() {
   var password = document.getElementById('wifi-password').value;
   document.getElementById('btn-connect').disabled = true;
-  document.getElementById('status-area').innerHTML = '<div class="spinner"></div><div style="color:#36A5CA">Connecting to ' + selectedSSID + '...</div><div style="color:#6BCCBD;font-size:12px;margin-top:8px">Your phone will briefly disconnect. If the password is wrong, reconnect to InkSlab-Setup and this page will show the error.</div>';
+  _failCount = 0;
+  document.getElementById('status-area').innerHTML = '<div class="spinner"></div><div style="color:#36A5CA">Connecting to ' + selectedSSID + '...</div>';
   fetch('/api/wifi/connect', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1892,27 +1898,39 @@ function doConnect() {
       document.getElementById('btn-connect').disabled = false;
       return;
     }
-    // Start polling for result
     _statusPoll = setInterval(checkConnectStatus, 2000);
   }).catch(function() {
-    document.getElementById('status-area').innerHTML = '<div class="error-msg">Request failed</div>';
+    document.getElementById('status-area').innerHTML = '<div class="error-msg">Request failed. Try again.</div>';
     document.getElementById('btn-connect').disabled = false;
   });
 }
 
 function checkConnectStatus() {
   fetch('/api/wifi/status').then(function(r) { return r.json(); }).then(function(d) {
+    _failCount = 0;
     var cs = d.connect_status;
     if (cs.status === 'success') {
       clearInterval(_statusPoll); _statusPoll = null;
       showSuccess(cs.ip, cs.ssid);
     } else if (cs.status === 'failed') {
       clearInterval(_statusPoll); _statusPoll = null;
-      document.getElementById('status-area').innerHTML = '<div class="error-msg">' + (cs.error || 'Connection failed. Check your password.') + '</div>';
+      document.getElementById('status-area').innerHTML = '<div class="error-msg" style="font-size:15px;line-height:1.5">' + (cs.error || 'Connection failed.') + '<br><br>Check your password and tap Connect to try again.</div>';
       document.getElementById('btn-connect').disabled = false;
     }
   }).catch(function() {
-    // Connection might be in progress (hotspot tearing down) — normal, keep polling
+    _failCount++;
+    if (_failCount >= 4) {
+      clearInterval(_statusPoll); _statusPoll = null;
+      document.getElementById('status-area').innerHTML =
+        '<div style="color:#6BCCBD;font-size:14px;line-height:1.6;text-align:left;padding:8px">'
+        + '<strong style="color:#FCFDF0">Your phone disconnected</strong> (this is normal).<br><br>'
+        + '<strong style="color:#6BCCBD">If it worked:</strong> Check the e-ink display &#8212; it will show your new dashboard address.<br><br>'
+        + '<strong style="color:#ff6b6b">If password was wrong:</strong><br>'
+        + '1. Reconnect to <strong>InkSlab-Setup</strong> WiFi<br>'
+        + '2. Open <strong>10.42.0.1</strong> in your browser<br>'
+        + '3. The error will be shown and you can retry'
+        + '</div>';
+    }
   });
 }
 
@@ -1923,7 +1941,7 @@ function showSuccess(ip, ssid) {
     + '<h2>Connected!</h2>'
     + '<p style="color:#D8E6E4;font-size:15px;margin-bottom:16px">Your InkSlab is now on <strong>' + ssid.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</strong></p>'
     + '<div class="ip">http://' + ip.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
-    + '<p>Open this address in your web browser (Safari, Chrome, etc.) to access the dashboard.</p>'
+    + '<p>Open this address in your web browser to access the dashboard.</p>'
     + '<p style="margin-top:20px;color:#36A5CA;font-size:12px">The e-ink display will also show this address.</p>'
     + '</div>';
 }
@@ -1932,9 +1950,8 @@ function showSuccess(ip, ssid) {
 fetch('/api/wifi/status').then(function(r) { return r.json(); }).then(function(d) {
   var cs = d.connect_status;
   if (cs && cs.status === 'failed') {
-    // Show the previous failure so user knows what happened
     selectNetwork(cs.ssid || 'Unknown', '');
-    document.getElementById('status-area').innerHTML = '<div class="error-msg">' + (cs.error || 'Connection failed. Check your password and try again.') + '</div>';
+    document.getElementById('status-area').innerHTML = '<div class="error-msg" style="font-size:15px;line-height:1.5">' + (cs.error || 'Connection failed.') + '<br><br>Check your password and tap Connect to try again.</div>';
     document.getElementById('btn-connect').disabled = false;
   }
 }).catch(function() {});
