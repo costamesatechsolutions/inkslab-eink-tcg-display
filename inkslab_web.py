@@ -977,6 +977,7 @@ def api_download_stop():
             _download_proc = None
             _download_tcg = None
             _close_download_log()
+            _cache_invalidate('storage')
             return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "No download running"})
 
@@ -995,6 +996,7 @@ def api_download_status():
             _close_download_log()
             _download_proc = None
             _download_tcg = None
+            _cache_invalidate('storage')
             tcg = None
         else:
             tcg = None
@@ -2996,6 +2998,10 @@ function loadStorage() {
     html += '<div class="storage-legend-item"><span class="storage-legend-dot" style="background:#E8786B"></span>System</div>';
     html += '<div class="storage-legend-item"><span class="storage-legend-dot" style="background:#1F333F;border:1px solid #36A5CA44"></span>Free</div>';
     html += '</div></div>';
+    var freeMb = freeGb * 1024;
+    if (freeMb < 100) {
+      html += '<div style="background:#E8786B22;border:1px solid #E8786B;border-radius:6px;padding:8px 12px;margin:8px 0;color:#E8786B;font-size:12px;font-weight:600">&#9888; Storage almost full — delete some cards to free space</div>';
+    }
     tcgEntries.forEach(function(e) {
       var tcg = e[0], d = e[1];
       var name = (_tcgRegistry[tcg] && _tcgRegistry[tcg].name) || tcg.toUpperCase();
@@ -3209,18 +3215,30 @@ function createCustomFolder() {
 
 function uploadCustomCards(folderId, files) {
   if (!files.length) return;
-  var done = 0;
+  var done = 0, failed = 0;
   showToast('Uploading ' + files.length + ' file(s)...');
   Array.from(files).forEach(function(file) {
     var fd = new FormData();
     fd.append('folder', folderId);
     fd.append('file', file);
-    fetch(API + '/api/custom/upload', {method:'POST', body: fd}).then(r => r.json()).then(function() {
-      done++;
-      if (done >= files.length) {
-        showToast('Uploaded ' + done + ' file(s)');
+    fetch(API + '/api/custom/upload', {method:'POST', body: fd}).then(function(r) {
+      return r.json().then(function(d) {
+        if (d.error) { failed++; showToast(d.error, 4000); }
+        else { done++; }
+        if (done + failed >= files.length) {
+          if (done > 0) showToast('Uploaded ' + done + ' file(s)' + (failed ? ', ' + failed + ' failed' : ''));
+          refreshCustomFolder(folderId);
+          loadCustomFolders();
+          loadStorage();
+        }
+      });
+    }).catch(function() {
+      failed++;
+      if (done + failed >= files.length) {
+        showToast('Upload error — ' + failed + ' file(s) failed', 4000);
         refreshCustomFolder(folderId);
         loadCustomFolders();
+        loadStorage();
       }
     });
   });
