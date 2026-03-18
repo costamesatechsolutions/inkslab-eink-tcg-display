@@ -255,39 +255,59 @@ def stop_hotspot():
 def connect_to_network(ssid, password):
     """Attempt to connect to a WiFi network.
     Returns (success: bool, message: str). Message is either the IP or an error."""
+    # Delete any pre-existing profile for this SSID (from Pi Imager setup, previous
+    # failed attempts, etc.).  nmcli dev wifi connect fails immediately with
+    # "Connection already exists" if we skip this step.
+    logger.info("Removing any existing profile for '%s'...", ssid)
+    _run_nmcli(["con", "delete", "id", ssid], timeout=10)
+    time.sleep(1)
+
     # Rescan so nmcli can see available networks after hotspot teardown
     logger.info("Scanning for networks before connection attempt...")
-    _run_nmcli(["dev", "wifi", "rescan"], timeout=10)
-    time.sleep(3)
+    _run_nmcli(["dev", "wifi", "rescan"], timeout=15)
+    time.sleep(5)  # Give wlan0 time to finish scanning in station mode
 
-    # Build connection command
-    args = ["dev", "wifi", "connect", ssid, "ifname", "wlan0"]
-    if password:
-        args.extend(["password", password])
+    def _attempt(attempt_num):
+        args = ["dev", "wifi", "connect", ssid, "ifname", "wlan0"]
+        if password:
+            args.extend(["password", password])
+        logger.info("Connection attempt %d for '%s'...", attempt_num, ssid)
+        return _run_nmcli(args, timeout=60)
 
-    rc, out, err = _run_nmcli(args, timeout=45)
+    rc, out, err = _attempt(1)
+    if rc != 0:
+        # Clean up partial profile and retry once after a longer delay
+        _run_nmcli(["con", "delete", "id", ssid], timeout=10)
+        logger.warning("Attempt 1 failed (%s), retrying in 10s...", err or out)
+        time.sleep(10)
+        _run_nmcli(["dev", "wifi", "rescan"], timeout=15)
+        time.sleep(3)
+        rc, out, err = _attempt(2)
+
     if rc != 0:
         error_msg = err or out or "Connection failed"
-        # Clean up common nmcli error messages
+        # Translate common nmcli error messages into plain English
         if "Secrets were required" in error_msg or "No suitable" in error_msg:
             error_msg = "Wrong password or network not found"
+        elif "already exists" in error_msg.lower():
+            error_msg = "Could not remove old profile — try again"
         elif "timeout" in error_msg.lower():
-            error_msg = "Connection timed out"
-        logger.error("WiFi connection failed: %s", error_msg)
-        # Clean up any profile created by the failed attempt
+            error_msg = "Connection timed out — check password and try again"
+        logger.error("WiFi connection failed after 2 attempts: %s", error_msg)
+        # Final cleanup of any profile left behind
         _run_nmcli(["con", "delete", "id", ssid], timeout=10)
         return False, error_msg
 
-    # Wait for an IP address (up to 20 seconds)
-    for _ in range(20):
+    # Wait for an IP address (up to 30 seconds — Pi Zero DHCP can be slow)
+    for _ in range(30):
         time.sleep(1)
         ip = get_local_ip()
         if ip:
             logger.info("Connected to '%s' with IP %s", ssid, ip)
             return True, ip
 
-    # Connected but no IP
-    logger.warning("Connected to '%s' but no IP obtained", ssid)
+    # Connected but no IP yet — still report success so splash screen shows
+    logger.warning("Connected to '%s' but no IP obtained within 30s", ssid)
     return True, "connected (no IP yet)"
 
 

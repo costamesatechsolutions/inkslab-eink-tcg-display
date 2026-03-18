@@ -105,6 +105,8 @@ rm -f /tmp/inkslab_prev
 rm -f /tmp/inkslab_pause
 rm -f /tmp/inkslab_collection_changed
 rm -f /tmp/inkslab_wifi_connected
+rm -f /tmp/inkslab_wifi_failed
+rm -f /tmp/inkslab_wifi_setup
 rm -f /tmp/inkslab_unbox
 
 # Clean up orphaned .tmp files from interrupted atomic writes

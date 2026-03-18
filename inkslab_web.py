@@ -1238,9 +1238,11 @@ def _perform_wifi_connection(ssid, password):
     global _wifi_setup_mode, _wifi_connect_result
 
     try:
-        # Step 1: Tear down hotspot and wait for wlan0 to switch from AP to station mode
+        # Step 1: Tear down hotspot and wait for wlan0 to switch from AP to station mode.
+        # Pi Zero W has a single-chip radio — it needs 10-15s to fully exit AP mode
+        # before nmcli can scan and connect in station mode.
         wifi_manager.stop_hotspot()
-        time.sleep(5)  # Pi Zero needs time for interface mode switch
+        time.sleep(12)
 
         # Step 2: Attempt connection
         success, message = wifi_manager.connect_to_network(ssid, password)
@@ -1785,8 +1787,8 @@ body { background: #132E3E; color: #D8E6E4; font-family: -apple-system, BlinkMac
 <div class="content" id="setup-content">
   <div class="welcome">
     <h2>InkSlab WiFi Setup</h2>
-    <p>Select your WiFi network below.</p>
-    <p style="font-size:11px;color:#36A5CA;margin-top:8px">If this popup is not working, open <b>10.42.0.1</b> in Safari or Chrome.</p>
+    <p>Select your home WiFi network below and enter its password.</p>
+    <p style="font-size:11px;color:#36A5CA;margin-top:8px">Page not loading? Open <b>10.42.0.1</b> in Safari or Chrome.</p>
   </div>
 
   <div class="card">
@@ -1920,7 +1922,7 @@ function doConnect() {
     } catch(e) {}
     /* Keep it simple — just update text, no innerHTML replacement.
        This avoids browser crashes when the network drops mid-render. */
-    sa.textContent = 'Connecting... Check the e-ink display for the result. If password was wrong, reconnect to InkSlab-Setup WiFi to retry.';
+    sa.innerHTML = '<strong style="color:#6BCCBD">Connecting\u2026</strong><br><br>\u26a0\ufe0f Your phone will disconnect from InkSlab-Setup in a moment \u2014 that is normal.<br><br>Watch the e\u2011ink display on your InkSlab:<br>\u2022 <b>If it shows your dashboard address</b> \u2014 reconnect your phone to your home WiFi and open that address.<br>\u2022 <b>If it shows \u201cConnection failed\u201d</b> \u2014 reconnect to InkSlab-Setup and try again with the correct password.';
     sa.style.color = '#6BCCBD';
     sa.style.fontSize = '14px';
     sa.style.lineHeight = '1.6';

@@ -987,12 +987,37 @@ def main():
                 logger.error("Display init failed after 5 attempts. Exiting.")
                 return
 
-    # Check WiFi status — show setup screen or splash screen
+    # Check WiFi status — show setup screen or splash screen.
+    # IMPORTANT: Use has_saved_wifi_profile() as the primary signal, NOT is_wifi_connected().
+    # On Pi Zero, boot WiFi association can take 30-60s. Checking only is_wifi_connected()
+    # at startup would falsely show the setup screen even when WiFi is configured, because
+    # the association hasn't completed yet. The setup screen tells users to join
+    # "InkSlab-Setup" — but inkslab_web.py correctly does NOT start that hotspot when a
+    # profile exists, so the phone scan fails. This was the root cause of WiFi setup issues.
     try:
+        has_profile = wifi_manager.has_saved_wifi_profile()
         wifi_connected = wifi_manager.is_wifi_connected()
     except Exception as e:
         logger.warning(f"WiFi check failed, assuming connected: {e}")
+        has_profile = True
         wifi_connected = True
+
+    # If WiFi is configured but not yet connected (normal on slow Pi Zero boot),
+    # wait up to 60 seconds for the association to complete before deciding.
+    if has_profile and not wifi_connected:
+        logger.info("WiFi profile exists but not yet connected — waiting up to 60s for association...")
+        for _ in range(12):  # 12 x 5s = 60s
+            time.sleep(5)
+            try:
+                wifi_connected = wifi_manager.is_wifi_connected()
+            except Exception:
+                pass
+            if wifi_connected:
+                logger.info("WiFi connected after waiting.")
+                break
+        if not wifi_connected:
+            logger.warning("WiFi profile exists but did not connect within 60s — showing splash anyway.")
+            wifi_connected = True  # Don't show setup screen when a profile is configured
 
     # E-ink render time: Spectra 6 (7-color) takes ~30s to physically draw.
     # After that, the user needs time to actually read the screen content.
@@ -1000,7 +1025,7 @@ def main():
     EINK_READ_TIME = 45     # extra seconds for user to read the result
     EINK_RENDER_WAIT = EINK_RENDER_TIME + EINK_READ_TIME  # total wait before next write
 
-    if wifi_connected:
+    if wifi_connected or has_profile:
         # WiFi is working — only show splash if we actually have cards to display.
         # If no cards, skip splash (no-cards screen shows the IP too, avoids extra flash).
         if deck.total > 0:
@@ -1010,10 +1035,10 @@ def main():
         else:
             logger.info("WiFi connected but no cards — skipping splash, will show no-cards screen")
     else:
-        # Not connected — show setup instructions and wait for trigger file only.
-        # Do NOT use is_wifi_connected() — hotspot registers as "connected" too.
+        # Genuinely no WiFi profile — show setup instructions and wait for trigger file.
+        # Do NOT poll is_wifi_connected() here — the hotspot itself registers as "connected".
         show_setup_screen(epd, config)
-        logger.info("No WiFi connection — showing setup screen, waiting for trigger...")
+        logger.info("No WiFi profile found — showing setup screen, waiting for trigger...")
         wait_count = 0
         max_wait = 600  # Give up after 10 minutes and proceed anyway
         while wait_count < max_wait:
