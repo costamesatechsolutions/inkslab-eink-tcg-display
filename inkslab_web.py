@@ -2223,6 +2223,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <h3>WiFi Network</h3>
     <div id="wifi-info" style="font-size:13px;color:#6BCCBD;margin-bottom:10px">Checking WiFi...</div>
     <button class="btn btn-secondary btn-block" onclick="changeWifi()">Change WiFi Network</button>
+    <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? Open this page in a private / incognito window.</p>
   </div>
   <div class="card" id="admin-panel" style="display:none;border:1px solid #ff6b6b33">
     <h3 style="color:#ff6b6b">Prepare for New Owner</h3>
@@ -3347,6 +3348,10 @@ function buildDynamicUI(registry) {
     startCountdown();
   });
 })();
+// Reload if browser restores this page from bfcache (back-forward cache).
+// bfcache freezes JS state, so buttons can silently lose their handlers
+// after navigating away and back. Forcing a reload fixes this transparently.
+window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
 </script>
 </body>
 </html>"""
