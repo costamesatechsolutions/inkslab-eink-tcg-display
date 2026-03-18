@@ -85,10 +85,19 @@ class EPD:
         epdconfig.spi_writebyte2(data)
         epdconfig.digital_write(self.cs_pin, 1)
         
-    def ReadBusyH(self):
+    def ReadBusyH(self, timeout_ms=120000):
+        """Wait for busy pin to go high (idle). Raises TimeoutError after timeout_ms
+        (default 120s — Spectra 6 refresh takes ~30s, so 120s gives plenty of margin).
+        Without this timeout, a hardware fault (loose ribbon cable, ESD damage, etc.)
+        would hang the process forever with no recovery."""
         logger.debug("e-Paper busy H")
+        waited = 0
         while(epdconfig.digital_read(self.busy_pin) == 0):      # 0: busy, 1: idle
             epdconfig.delay_ms(5)
+            waited += 5
+            if waited >= timeout_ms:
+                logger.error("e-Paper busy timeout after %dms — display may be disconnected", timeout_ms)
+                raise TimeoutError(f"e-Paper busy pin stuck low for {timeout_ms}ms")
         epdconfig.delay_ms(200)
         logger.debug("e-Paper busy H release")
 

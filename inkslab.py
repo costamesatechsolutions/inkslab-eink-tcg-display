@@ -1400,10 +1400,6 @@ def main():
             epd.sleep()
         except Exception:
             pass
-        try:
-            epd.Dev_exit()
-        except Exception:
-            pass
         logger.info("InkSlab stopped.")
 
 

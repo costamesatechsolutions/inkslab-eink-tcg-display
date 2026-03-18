@@ -10,6 +10,7 @@ ExecStart=/usr/bin/python3 -u /home/pi/inkslab/inkslab_web.py
 WorkingDirectory=/home/pi/inkslab
 Restart=always
 RestartSec=10
+TimeoutStopSec=15
 StandardOutput=journal
 StandardError=journal
 
