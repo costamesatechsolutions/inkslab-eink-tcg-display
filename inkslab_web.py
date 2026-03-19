@@ -2314,13 +2314,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div style="background:#1F333F;border-radius:4px;height:8px;margin:8px 0"><div id="update-bar" style="height:100%;border-radius:4px;background:#36A5CA;width:0%;transition:width 0.5s"></div></div>
       <div id="update-stage" style="font-size:12px;color:#6BCCBD;text-align:center"></div>
     </div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">After an update the page may need a hard refresh: Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) / hold Shift &amp; tap reload (mobile). Or open in a private / incognito window.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card">
     <h3>WiFi Network</h3>
     <div id="wifi-info" style="font-size:13px;color:#6BCCBD;margin-bottom:10px">Checking WiFi...</div>
     <button class="btn btn-secondary btn-block" onclick="changeWifi()">Change WiFi Network</button>
-    <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? Try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to hard refresh, or open in a private / incognito window.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card" id="admin-panel" style="display:none;border:1px solid #ff6b6b33">
     <h3 style="color:#ff6b6b">Prepare for New Owner</h3>
@@ -2390,12 +2390,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <button class="btn btn-primary" onclick="createCustomFolder()" style="flex:1">Create</button>
     </div>
     <div id="custom-folders"></div>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card">
     <h3>Delete Data</h3>
     <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Remove all downloaded card images for a TCG.</p>
     <div id="delete-buttons" class="flex-row" style="flex-wrap:wrap;gap:6px"></div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to hard refresh, or open in a private / incognito window.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
   </div>
 </div>
 
