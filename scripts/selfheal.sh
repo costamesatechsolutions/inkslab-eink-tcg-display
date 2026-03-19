@@ -110,6 +110,8 @@ rm -f /tmp/inkslab_wifi_setup
 rm -f /tmp/inkslab_unbox
 rm -f /tmp/inkslab_watchdog_setup
 rm -f /tmp/inkslab_update_status.json
+rm -f /tmp/inkslab_status.json
+rm -f /tmp/inkslab_download.log
 
 # Clean up orphaned .tmp files from interrupted atomic writes
 find /home/pi/inkslab -name '*.tmp' -mmin +5 -delete 2>/dev/null
