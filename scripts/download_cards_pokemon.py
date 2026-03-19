@@ -5,12 +5,28 @@ Supports resume - re-run safely to pick up where you left off.
 """
 
 import os
+import tempfile
 import requests
 import json
 import shutil
 import time
 import random
 import sys
+
+
+def _atomic_json_write(path, data):
+    """Write JSON via temp+rename so power loss can't corrupt the file."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 # --- CONFIGURATION ---
 BASE_DIR = "/home/pi/pokemon_cards"
@@ -72,6 +88,7 @@ def main():
 
     try:
         r = requests.get(SETS_URL, headers=HEADERS, timeout=30)
+        r.raise_for_status()
         sets = r.json()
     except Exception as e:
         print(f"Error fetching sets: {e}")
@@ -86,8 +103,7 @@ def main():
         }
 
     index_path = os.path.join(BASE_DIR, "master_index.json")
-    with open(index_path, 'w') as f:
-        json.dump(master_index, f)
+    _atomic_json_write(index_path, master_index)
     print(f"   Saved master_index.json ({len(master_index)} sets)")
 
     # Start with newest sets
@@ -109,6 +125,7 @@ def main():
 
         try:
             r = requests.get(f"{CARDS_BASE_URL}{set_id}.json", headers=HEADERS, timeout=30)
+            r.raise_for_status()
             cards = r.json()
         except Exception:
             print(f"  > Error fetching card list. Skipping.")
@@ -125,8 +142,7 @@ def main():
             }
 
         data_file = os.path.join(set_dir, "_data.json")
-        with open(data_file, 'w') as f:
-            json.dump(slim_db, f)
+        _atomic_json_write(data_file, slim_db)
 
         # Download card images
         for card in cards:

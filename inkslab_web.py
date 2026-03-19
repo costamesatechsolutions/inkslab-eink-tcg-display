@@ -111,6 +111,17 @@ def _has_disk_space(path="/home/pi"):
     """Return True if there's enough free space to safely write."""
     return _check_disk_space(path) >= MIN_FREE_SPACE_MB
 
+
+def _write_status(data):
+    """Atomic write to STATUS_FILE (tmp + os.replace on same tmpfs)."""
+    try:
+        tmp = STATUS_FILE + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(data, f)
+        os.replace(tmp, STATUS_FILE)
+    except Exception:
+        pass
+
 # --- TTL CACHE (avoids re-walking 15,000+ files on every request) ---
 _cache = {}
 _cache_lock = threading.Lock()
@@ -250,19 +261,24 @@ def api_get_config():
 @app.route('/api/config', methods=['POST'])
 def api_set_config():
     updates = request.get_json(force=True)
+    if not isinstance(updates, dict):
+        return jsonify({"error": "invalid request"}), 400
     # Validate values to prevent bad config from crashing the display daemon
-    if 'day_interval' in updates:
-        updates['day_interval'] = max(10, min(86400, int(updates['day_interval'])))
-    if 'night_interval' in updates:
-        updates['night_interval'] = max(10, min(86400, int(updates['night_interval'])))
-    if 'day_start' in updates:
-        updates['day_start'] = max(0, min(23, int(updates['day_start'])))
-    if 'day_end' in updates:
-        updates['day_end'] = max(0, min(23, int(updates['day_end'])))
-    if 'color_saturation' in updates:
-        updates['color_saturation'] = max(0.0, min(10.0, float(updates['color_saturation'])))
-    if 'rotation_angle' in updates:
-        updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (0, 90, 180, 270) else 270
+    try:
+        if 'day_interval' in updates:
+            updates['day_interval'] = max(10, min(86400, int(updates['day_interval'])))
+        if 'night_interval' in updates:
+            updates['night_interval'] = max(10, min(86400, int(updates['night_interval'])))
+        if 'day_start' in updates:
+            updates['day_start'] = max(0, min(23, int(updates['day_start'])))
+        if 'day_end' in updates:
+            updates['day_end'] = max(0, min(23, int(updates['day_end'])))
+        if 'color_saturation' in updates:
+            updates['color_saturation'] = max(0.0, min(10.0, float(updates['color_saturation'])))
+        if 'rotation_angle' in updates:
+            updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (0, 90, 180, 270) else 270
+    except (ValueError, TypeError):
+        return jsonify({"error": "invalid value"}), 400
     if 'active_tcg' in updates:
         if updates['active_tcg'] not in ('pokemon', 'mtg', 'lorcana', 'custom'):
             updates['active_tcg'] = 'pokemon'
@@ -287,8 +303,7 @@ def api_set_config():
             status['pending'] = 'Switching to ' + updates['active_tcg'].upper() + '...'
             status['timestamp'] = int(time.time())
             status.pop('display_updating', None)
-            with open(STATUS_FILE, 'w') as f:
-                json.dump(status, f)
+            _write_status(status)
         except Exception:
             pass
     # Wake the display daemon immediately so it picks up the change within ~1 second
@@ -314,8 +329,7 @@ def api_next():
             status['pending'] = 'Loading next card...'
             status['timestamp'] = int(time.time())
             status.pop('display_updating', None)
-            with open(STATUS_FILE, 'w') as f:
-                json.dump(status, f)
+            _write_status(status)
         except Exception:
             pass
         return jsonify({"ok": True})
@@ -340,8 +354,7 @@ def api_prev():
             status['pending'] = 'Loading previous card...'
             status['timestamp'] = int(time.time())
             status.pop('display_updating', None)
-            with open(STATUS_FILE, 'w') as f:
-                json.dump(status, f)
+            _write_status(status)
         except Exception:
             pass
         return jsonify({"ok": True})
@@ -378,8 +391,7 @@ def api_pause():
             elif status.get('interval'):
                 next_change_out = int(time.time()) + status['interval']
             status['next_change'] = next_change_out
-            with open(STATUS_FILE, 'w') as f:
-                json.dump(status, f)
+            _write_status(status)
         except Exception:
             pass
     else:
@@ -410,8 +422,7 @@ def api_pause():
                     status = json.load(f)
             status['paused'] = True
             status['next_change'] = 0
-            with open(STATUS_FILE, 'w') as f:
-                json.dump(status, f)
+            _write_status(status)
         except Exception:
             pass
     return jsonify({"ok": True, "paused": paused, "next_change": next_change_out})
@@ -1464,8 +1475,11 @@ def api_factory_reset():
     _close_download_log()
     for tmp_file in [STATUS_FILE, DOWNLOAD_LOG, NEXT_TRIGGER, COLLECTION_TRIGGER,
                      "/tmp/inkslab_prev", "/tmp/inkslab_pause",
-                     "/tmp/inkslab_wifi_connected", "/tmp/inkslab_update_status.json",
-                     "/tmp/inkslab_update.lock"]:
+                     "/tmp/inkslab_wifi_connected", "/tmp/inkslab_wifi_failed",
+                     "/tmp/inkslab_wifi_setup", "/tmp/inkslab_unbox",
+                     "/tmp/inkslab_update_status.json",
+                     "/tmp/inkslab_update.lock",
+                     STATUS_FILE + ".tmp"]:
         try:
             if os.path.exists(tmp_file):
                 os.remove(tmp_file)
@@ -1729,14 +1743,14 @@ def api_custom_card_metadata():
     if not os.path.isdir(folder_path):
         return jsonify({"error": "folder not found"}), 404
     data_file = os.path.join(folder_path, "_data.json")
-    cards = {}
-    if os.path.exists(data_file):
-        try:
-            with open(data_file, 'r') as f:
-                cards = json.load(f)
-        except Exception:
-            pass
     with _custom_lock:
+        cards = {}
+        if os.path.exists(data_file):
+            try:
+                with open(data_file, 'r') as f:
+                    cards = json.load(f)
+            except Exception:
+                pass
         if card_id not in cards:
             cards[card_id] = {}
         if "name" in data:
@@ -1757,14 +1771,14 @@ def api_custom_set_metadata():
     if not folder_id:
         return jsonify({"error": "id required"}), 400
     idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
-    master = {}
-    if os.path.exists(idx_path):
-        try:
-            with open(idx_path, 'r') as f:
-                master = json.load(f)
-        except Exception:
-            pass
     with _custom_lock:
+        master = {}
+        if os.path.exists(idx_path):
+            try:
+                with open(idx_path, 'r') as f:
+                    master = json.load(f)
+            except Exception:
+                pass
         if folder_id not in master:
             master[folder_id] = {"name": folder_id, "year": ""}
         if "name" in data:

@@ -8,12 +8,28 @@ Usage:
 """
 
 import os
+import tempfile
 import requests
 import json
 import shutil
 import time
 import random
 import gc
+
+
+def _atomic_json_write(path, data):
+    """Write JSON via temp+rename so power loss can't corrupt the file."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 # --- CONFIGURATION ---
 BASE_DIR = "/home/pi/lorcana_cards"
@@ -165,8 +181,7 @@ def process_set(set_info, cards):
         }
 
     data_file = os.path.join(set_dir, "_data.json")
-    with open(data_file, "w") as f:
-        json.dump(slim_db, f)
+    _atomic_json_write(data_file, slim_db)
 
     # Download images
     download_count = 0
@@ -248,8 +263,7 @@ def main():
         }
 
     index_path = os.path.join(BASE_DIR, "master_index.json")
-    with open(index_path, "w") as f:
-        json.dump(master_index, f)
+    _atomic_json_write(index_path, master_index)
     print(f"2. Saved master_index.json ({len(master_index)} sets)\n")
 
     print("3. Downloading cards per set...")

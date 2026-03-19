@@ -1145,7 +1145,8 @@ def main():
 
                 if action == "wifi_setup":
                     show_setup_screen(epd, config)
-                    while not _shutdown:
+                    _wifi_wait = 0
+                    while not _shutdown and _wifi_wait < 600:
                         if os.path.exists(WIFI_CONNECTED_TRIGGER):
                             try:
                                 os.remove(WIFI_CONNECTED_TRIGGER)
@@ -1161,9 +1162,11 @@ def main():
                             except OSError:
                                 pass
                             show_wifi_failed_screen(epd, config, ssid=ssid)
+                            _wifi_wait = 0  # Reset timeout on user activity
                         # Do NOT check is_wifi_connected() here — hotspot
                         # registers as "connected" and breaks the loop early
                         time.sleep(3)
+                        _wifi_wait += 3
                     # No splash — the no-cards screen shows IP + QR anyway
                     _no_cards_shown = False
                     continue
@@ -1331,7 +1334,8 @@ def main():
                 if action == "wifi_setup":
                     logger.info("WiFi setup mode — showing setup screen")
                     show_setup_screen(epd, config)
-                    while not _shutdown:
+                    _wifi_wait = 0
+                    while not _shutdown and _wifi_wait < 600:
                         if os.path.exists(WIFI_CONNECTED_TRIGGER):
                             try:
                                 os.remove(WIFI_CONNECTED_TRIGGER)
@@ -1347,7 +1351,9 @@ def main():
                             except OSError:
                                 pass
                             show_wifi_failed_screen(epd, config, ssid=ssid)
+                            _wifi_wait = 0  # Reset timeout on user activity
                         time.sleep(3)
+                        _wifi_wait += 3
                     show_splash_screen(epd, config)
                     time.sleep(EINK_RENDER_WAIT)
                     continue
@@ -1399,6 +1405,32 @@ def main():
                             deck.deck.insert(0, current)
                             deck.deck.insert(0, previous)
                         continue
+                    # Re-create trigger files for actions that the main loop
+                    # handlers (above) would process — prevents silent drops.
+                    if action == "wifi_setup":
+                        try:
+                            with open(WIFI_SETUP_TRIGGER, 'w') as f:
+                                f.write('1')
+                        except OSError:
+                            pass
+                    elif action == "wifi_connected":
+                        try:
+                            with open(WIFI_CONNECTED_TRIGGER, 'w') as f:
+                                f.write('1')
+                        except OSError:
+                            pass
+                    elif isinstance(action, tuple) and action[0] == "wifi_failed":
+                        try:
+                            with open(WIFI_FAILED_TRIGGER, 'w') as f:
+                                f.write(action[1])
+                        except OSError:
+                            pass
+                    elif action == "unbox":
+                        try:
+                            with open(UNBOX_TRIGGER, 'w') as f:
+                                f.write('1')
+                        except OSError:
+                            pass
 
                 # If TCG or collection mode changed, rebuild and advance to new card
                 new_tcg = config["active_tcg"]
