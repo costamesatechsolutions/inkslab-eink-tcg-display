@@ -1058,9 +1058,10 @@ def main():
         # Do NOT poll is_wifi_connected() here — the hotspot itself registers as "connected".
         show_setup_screen(epd, config)
         logger.info("No WiFi profile found — showing setup screen, waiting for trigger...")
-        wait_count = 0
-        max_wait = 600  # Give up after 10 minutes and proceed anyway
-        while wait_count < max_wait:
+        # No timeout on first boot — the user MUST connect WiFi before
+        # anything else can happen.  The hotspot is broadcasting and the
+        # display shows the QR code.  We'll wait here until they do.
+        while not _shutdown:
             if os.path.exists(WIFI_CONNECTED_TRIGGER):
                 try:
                     os.remove(WIFI_CONNECTED_TRIGGER)
@@ -1076,9 +1077,7 @@ def main():
                 except OSError:
                     pass
                 show_wifi_failed_screen(epd, config, ssid=ssid)
-                # Don't increment wait_count — keep waiting for success
             time.sleep(5)
-            wait_count += 5
         # WiFi connected — skip splash if no cards (no-cards screen shows IP)
         if deck.total > 0:
             logger.info("WiFi wait complete, showing splash screen...")
