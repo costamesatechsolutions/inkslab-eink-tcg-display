@@ -3421,7 +3421,7 @@ function loadDlButtons() {
   // Delete buttons
   var delEl = document.getElementById('delete-buttons');
   if (delEl) {
-    delEl.innerHTML = Object.entries(_tcgRegistry).map(function(e) {
+    delEl.innerHTML = Object.entries(_tcgRegistry).filter(function(e) { return e[0] !== 'custom'; }).map(function(e) {
       return '<button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteData(\\'' + e[0] + '\\', this)">Delete ' + e[1].name + '</button>';
     }).join('');
   }
