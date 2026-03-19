@@ -64,6 +64,7 @@ _download_log_fh = None
 _download_lock = threading.Lock()
 
 # --- WIFI SETUP MODE ---
+WATCHDOG_SETUP_FLAG = "/tmp/inkslab_watchdog_setup"
 _wifi_setup_mode = False
 _wifi_connect_result = {"status": "idle"}
 _wifi_connect_lock = threading.Lock()
@@ -469,7 +470,9 @@ def api_card_image(tcg, set_id, card_id):
         card_path = os.path.join(library, safe_set, safe_card + ext)
         if os.path.exists(card_path):
             mime = 'image/png' if ext == '.png' else 'image/jpeg'
-            return send_file(card_path, mimetype=mime)
+            resp = make_response(send_file(card_path, mimetype=mime))
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return resp
     return '', 404
 
 
@@ -1321,6 +1324,11 @@ def _perform_wifi_connection(ssid, password):
                     "ssid": ssid, "error": None,
                 }
             _wifi_setup_mode = False
+            # Clear watchdog flag — WiFi is back
+            try:
+                os.remove(WATCHDOG_SETUP_FLAG)
+            except OSError:
+                pass
             # Signal inkslab.py to refresh splash screen
             try:
                 with open("/tmp/inkslab_wifi_connected", "w") as f:
@@ -1360,6 +1368,10 @@ def _perform_wifi_connection(ssid, password):
 @app.route('/api/wifi/status')
 def api_wifi_status():
     """Return current WiFi state and setup mode flag."""
+    global _wifi_setup_mode
+    # Daemon watchdog may have auto-started hotspot — pick up its flag
+    if not _wifi_setup_mode and os.path.exists(WATCHDOG_SETUP_FLAG):
+        _wifi_setup_mode = True
     status = wifi_manager.get_wifi_status()
     status["setup_mode"] = _wifi_setup_mode
     with _wifi_connect_lock:
@@ -1429,6 +1441,16 @@ def api_factory_reset():
     global _wifi_setup_mode, _wifi_connect_result
     errors = []
 
+    # 0. Stop any running card download before deleting data
+    with _download_lock:
+        if _download_proc and _download_proc.poll() is None:
+            try:
+                _download_proc.terminate()
+                _download_proc.wait(timeout=5)
+            except Exception:
+                pass
+    _close_download_log()
+
     # 1. Forget all saved WiFi profiles (except hotspot)
     try:
         result = subprocess.run(
@@ -1476,7 +1498,8 @@ def api_factory_reset():
     for tmp_file in [STATUS_FILE, DOWNLOAD_LOG, NEXT_TRIGGER, COLLECTION_TRIGGER,
                      "/tmp/inkslab_prev", "/tmp/inkslab_pause",
                      "/tmp/inkslab_wifi_connected", "/tmp/inkslab_wifi_failed",
-                     "/tmp/inkslab_wifi_setup", "/tmp/inkslab_unbox",
+                     "/tmp/inkslab_wifi_setup", "/tmp/inkslab_watchdog_setup",
+                     "/tmp/inkslab_unbox",
                      "/tmp/inkslab_update_status.json",
                      "/tmp/inkslab_update.lock",
                      STATUS_FILE + ".tmp"]:
@@ -1526,6 +1549,9 @@ def api_factory_reset():
 @app.route('/redirect')
 @app.route('/canonical.html')
 def captive_portal_detect():
+    global _wifi_setup_mode
+    if not _wifi_setup_mode and os.path.exists(WATCHDOG_SETUP_FLAG):
+        _wifi_setup_mode = True
     if _wifi_setup_mode:
         # Serve setup page directly — avoids redirect delay that shows blank blue screen
         resp = make_response(WIFI_SETUP_HTML)
@@ -3437,6 +3463,10 @@ def add_no_cache(response):
 
 @app.route('/')
 def dashboard():
+    global _wifi_setup_mode
+    # Daemon watchdog may have auto-started hotspot — pick up its flag
+    if not _wifi_setup_mode and os.path.exists(WATCHDOG_SETUP_FLAG):
+        _wifi_setup_mode = True
     html = WIFI_SETUP_HTML if _wifi_setup_mode else DASHBOARD_HTML
     resp = make_response(html)
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'

@@ -59,9 +59,19 @@ WIFI_CONNECTED_TRIGGER = "/tmp/inkslab_wifi_connected"
 WIFI_SETUP_TRIGGER = "/tmp/inkslab_wifi_setup"
 WIFI_FAILED_TRIGGER = "/tmp/inkslab_wifi_failed"
 UNBOX_TRIGGER = "/tmp/inkslab_unbox"
+WATCHDOG_SETUP_FLAG = "/tmp/inkslab_watchdog_setup"
+
+# WiFi watchdog: if WiFi is down for this many seconds, auto-enter hotspot setup mode.
+# 30 minutes — long enough to ride out brief router reboots, short enough that the user
+# doesn't stare at an unreachable device for hours after changing routers.
+WIFI_WATCHDOG_TIMEOUT = 1800  # 30 minutes
+WIFI_WATCHDOG_CHECK_INTERVAL = 120  # check every 2 minutes (don't spam nmcli)
 
 # Graceful shutdown flag (module-level so wait_with_polling can check it)
 _shutdown = False
+
+# WiFi watchdog state (module-level so it persists across wait_with_polling calls)
+_wifi_down_since = 0  # timestamp when WiFi was first seen down, 0 = connected
 
 # Image processing (not configurable via web — these are display-specific)
 DISPLAY_WIDTH = 400
@@ -230,10 +240,10 @@ def show_splash_screen(epd, config):
 
         # Get WiFi info
         ssid = None
-        signal = None
+        signal_strength = None
         try:
             ssid = wifi_manager.get_active_ssid()
-            signal = wifi_manager.get_signal_strength()
+            signal_strength = wifi_manager.get_signal_strength()
         except Exception:
             pass
 
@@ -246,8 +256,8 @@ def show_splash_screen(epd, config):
         # WiFi info line
         if ssid:
             wifi_text = f"WiFi: {ssid}"
-            if signal is not None:
-                wifi_text += f"  ({signal}%)"
+            if signal_strength is not None:
+                wifi_text += f"  ({signal_strength}%)"
             draw.text((cx, 95), wifi_text, fill=(0, 0, 0), font=font_small, anchor="mm")
 
         # Dashboard URL with QR code
@@ -474,11 +484,11 @@ def show_no_cards_screen(epd, config, ip=None):
         # WiFi info
         try:
             ssid = wifi_manager.get_active_ssid()
-            signal = wifi_manager.get_signal_strength()
+            signal_strength = wifi_manager.get_signal_strength()
             if ssid:
                 wifi_text = f"WiFi: {ssid}"
-                if signal is not None:
-                    wifi_text += f"  ({signal}%)"
+                if signal_strength is not None:
+                    wifi_text += f"  ({signal_strength}%)"
                 draw.text((cx, 85), wifi_text, fill=(0, 0, 0), font=font_small, anchor="mm")
         except Exception:
             pass
@@ -868,6 +878,95 @@ def card_summary(card_path, master_index):
     }
 
 
+def _wifi_setup_wait_loop(epd, config):
+    """Wait in hotspot/setup mode for the user to configure WiFi.
+
+    Handles three scenarios:
+    - User-initiated "Change WiFi": old profile deleted, no profile exists → wait indefinitely
+    - Watchdog-triggered (WiFi went down): profile still exists → alternate between
+      hotspot mode (10 min, so user can reconfigure) and reconnect attempts (try saved
+      WiFi for 30s). This lets the device auto-recover if the old WiFi comes back.
+    - User manually connects via setup page → wifi_connected trigger fires → return
+
+    Returns True if WiFi reconnected, False if loop exited via timeout.
+    """
+    global _wifi_down_since
+    RECONNECT_ATTEMPT_WAIT = 30  # seconds to wait for WiFi association after stopping hotspot
+
+    _wifi_wait = 0
+    while not _shutdown and _wifi_wait < 600:
+        # User connected via setup page
+        if os.path.exists(WIFI_CONNECTED_TRIGGER):
+            try:
+                os.remove(WIFI_CONNECTED_TRIGGER)
+            except OSError:
+                pass
+            _wifi_down_since = 0
+            try:
+                os.remove(WATCHDOG_SETUP_FLAG)
+            except OSError:
+                pass
+            return True
+
+        # User tried to connect but it failed
+        if os.path.exists(WIFI_FAILED_TRIGGER):
+            ssid = ""
+            try:
+                with open(WIFI_FAILED_TRIGGER, 'r') as f:
+                    ssid = f.read().strip()
+                os.remove(WIFI_FAILED_TRIGGER)
+            except OSError:
+                pass
+            show_wifi_failed_screen(epd, config, ssid=ssid)
+            _wifi_wait = 0  # Reset timeout on user activity
+
+        time.sleep(3)
+        _wifi_wait += 3
+
+        # Timeout expired — behavior depends on whether a WiFi profile exists
+        if _wifi_wait >= 600:
+            if not wifi_manager.has_saved_wifi_profile():
+                # No profile (user deleted WiFi but hasn't configured new one) — keep waiting
+                _wifi_wait = 0
+                show_setup_screen(epd, config)
+            elif os.path.exists(WATCHDOG_SETUP_FLAG):
+                # Watchdog-triggered setup with a saved profile — try to reconnect.
+                # This handles: router rebooted, temporary outage, WiFi came back.
+                logger.info("WiFi setup timeout — attempting reconnect to saved network...")
+                wifi_manager.stop_hotspot()
+                time.sleep(5)  # Let radio switch from AP to station mode
+
+                # Wait for NetworkManager to auto-reconnect to saved profile
+                reconnected = False
+                for _ in range(RECONNECT_ATTEMPT_WAIT // 3):
+                    time.sleep(3)
+                    if _shutdown:
+                        return False
+                    try:
+                        if wifi_manager.is_wifi_connected():
+                            reconnected = True
+                            break
+                    except Exception:
+                        pass
+
+                if reconnected:
+                    logger.info("WiFi reconnected to saved network — resuming normal operation")
+                    _wifi_down_since = 0
+                    try:
+                        os.remove(WATCHDOG_SETUP_FLAG)
+                    except OSError:
+                        pass
+                    return True
+                else:
+                    # Still can't connect — restart hotspot and try again later
+                    logger.info("Reconnect failed — restarting hotspot for another cycle")
+                    wifi_manager.start_hotspot()
+                    show_setup_screen(epd, config)
+                    _wifi_wait = 0  # Another 10 min in hotspot mode
+
+    return False
+
+
 def wait_with_polling(seconds, config_check_interval=5):
     """Sleep for `seconds`, checking triggers every 1s and config every 5s.
 
@@ -951,6 +1050,46 @@ def wait_with_polling(seconds, config_check_interval=5):
             config = new_config
             last_config_check = time.time()
 
+        # WiFi watchdog: detect sustained WiFi loss and auto-enter hotspot setup mode.
+        # This catches: new router, changed password, moved house — any scenario where
+        # the saved WiFi profile can no longer connect and the user has no other way
+        # to reach the device (no physical buttons, no SSH).
+        global _wifi_down_since
+        now = time.time()
+        if now - getattr(wait_with_polling, '_last_wifi_check', 0) >= WIFI_WATCHDOG_CHECK_INTERVAL:
+            wait_with_polling._last_wifi_check = now
+            try:
+                if wifi_manager.is_wifi_connected():
+                    _wifi_down_since = 0  # WiFi is fine — reset watchdog
+                    # Clear watchdog flag if it was set from a previous auto-recovery
+                    if os.path.exists(WATCHDOG_SETUP_FLAG):
+                        try:
+                            os.remove(WATCHDOG_SETUP_FLAG)
+                        except OSError:
+                            pass
+                elif _wifi_down_since == 0:
+                    _wifi_down_since = now  # First time seeing WiFi down
+                    logger.info("WiFi watchdog: connection lost, starting timer")
+                elif now - _wifi_down_since >= WIFI_WATCHDOG_TIMEOUT:
+                    logger.warning("WiFi watchdog: down for %d min — auto-entering hotspot setup",
+                                   int((now - _wifi_down_since) / 60))
+                    _wifi_down_since = 0  # Reset so we don't re-trigger immediately
+                    wifi_manager.start_hotspot()
+                    # Signal web server to enter setup mode
+                    try:
+                        with open(WATCHDOG_SETUP_FLAG, 'w') as f:
+                            f.write('1')
+                    except OSError:
+                        pass
+                    try:
+                        with open(WIFI_SETUP_TRIGGER, 'w') as f:
+                            f.write('1')
+                    except OSError:
+                        pass
+                    return load_config(), "wifi_setup"
+            except Exception as e:
+                logger.debug("WiFi watchdog check failed: %s", e)
+
         time.sleep(1)
         # Only count elapsed time when not paused
         if not os.path.exists(PAUSE_FILE):
@@ -960,6 +1099,7 @@ def wait_with_polling(seconds, config_check_interval=5):
 
 
 def main():
+    global _shutdown, _wifi_down_since
     logger.info("InkSlab starting...")
 
     # Write startup status immediately so web UI shows correct state
@@ -995,6 +1135,15 @@ def main():
             epd.init()
             epd.sleep()
             logger.info("Display initialized successfully")
+
+            # Register signal handlers as soon as EPD is initialized, so SIGTERM
+            # during WiFi wait loops sets _shutdown instead of killing the process
+            def _handle_shutdown(signum, frame):
+                global _shutdown
+                _shutdown = True
+
+            signal.signal(signal.SIGTERM, _handle_shutdown)
+            signal.signal(signal.SIGINT, _handle_shutdown)
             break
         except Exception as e:
             logger.error(f"Display init attempt {attempt}/5 failed: {e}")
@@ -1037,6 +1186,11 @@ def main():
         if not wifi_connected:
             logger.warning("WiFi profile exists but did not connect within 60s — showing splash anyway.")
             wifi_connected = True  # Don't show setup screen when a profile is configured
+            # Seed WiFi watchdog with 25 minutes already "elapsed" so we only wait
+            # ~5 more minutes before auto-entering hotspot mode. The 60s boot wait
+            # already proved the network is unreachable — don't make the user stare
+            # at an unreachable device for another 30 minutes.
+            _wifi_down_since = time.time() - (WIFI_WATCHDOG_TIMEOUT - 300)
 
     # E-ink render time: Spectra 6 (7-color) takes ~30s to physically draw.
     # After that, the user needs time to actually read the screen content.
@@ -1086,16 +1240,6 @@ def main():
         else:
             logger.info("WiFi connected but no cards — skipping splash")
 
-    # Graceful shutdown: ensure display is put to sleep on exit
-    global _shutdown
-
-    def _handle_shutdown(signum, frame):
-        global _shutdown
-        _shutdown = True
-
-    signal.signal(signal.SIGTERM, _handle_shutdown)
-    signal.signal(signal.SIGINT, _handle_shutdown)
-
     def rebuild_deck(preserve_history=False):
         """Helper to rebuild the deck when TCG, collection mode, or collection content changes."""
         nonlocal active_tcg, library_dir, master_index, collection, deck, _deck_collection_only
@@ -1144,28 +1288,9 @@ def main():
 
                 if action == "wifi_setup":
                     show_setup_screen(epd, config)
-                    _wifi_wait = 0
-                    while not _shutdown and _wifi_wait < 600:
-                        if os.path.exists(WIFI_CONNECTED_TRIGGER):
-                            try:
-                                os.remove(WIFI_CONNECTED_TRIGGER)
-                            except OSError:
-                                pass
-                            break
-                        if os.path.exists(WIFI_FAILED_TRIGGER):
-                            ssid = ""
-                            try:
-                                with open(WIFI_FAILED_TRIGGER, 'r') as f:
-                                    ssid = f.read().strip()
-                                os.remove(WIFI_FAILED_TRIGGER)
-                            except OSError:
-                                pass
-                            show_wifi_failed_screen(epd, config, ssid=ssid)
-                            _wifi_wait = 0  # Reset timeout on user activity
-                        # Do NOT check is_wifi_connected() here — hotspot
-                        # registers as "connected" and breaks the loop early
-                        time.sleep(3)
-                        _wifi_wait += 3
+                    _wifi_reconnected = _wifi_setup_wait_loop(epd, config)
+                    if _wifi_reconnected:
+                        _no_cards_shown = False  # Force re-show with new IP
                     # No splash — the no-cards screen shows IP + QR anyway
                     _no_cards_shown = False
                     continue
@@ -1333,26 +1458,7 @@ def main():
                 if action == "wifi_setup":
                     logger.info("WiFi setup mode — showing setup screen")
                     show_setup_screen(epd, config)
-                    _wifi_wait = 0
-                    while not _shutdown and _wifi_wait < 600:
-                        if os.path.exists(WIFI_CONNECTED_TRIGGER):
-                            try:
-                                os.remove(WIFI_CONNECTED_TRIGGER)
-                            except OSError:
-                                pass
-                            break
-                        if os.path.exists(WIFI_FAILED_TRIGGER):
-                            ssid = ""
-                            try:
-                                with open(WIFI_FAILED_TRIGGER, 'r') as f:
-                                    ssid = f.read().strip()
-                                os.remove(WIFI_FAILED_TRIGGER)
-                            except OSError:
-                                pass
-                            show_wifi_failed_screen(epd, config, ssid=ssid)
-                            _wifi_wait = 0  # Reset timeout on user activity
-                        time.sleep(3)
-                        _wifi_wait += 3
+                    _wifi_setup_wait_loop(epd, config)
                     show_splash_screen(epd, config)
                     time.sleep(EINK_RENDER_WAIT)
                     continue

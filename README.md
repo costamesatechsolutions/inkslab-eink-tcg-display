@@ -22,6 +22,8 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 - **WiFi Setup Mode:** Pre-flashed units automatically create an "InkSlab-Setup" WiFi network on first boot. Connect with your phone, pick your home WiFi, and you're done — no SSH needed
 - **OTA Updates:** Update InkSlab software directly from the web dashboard — no SSH needed
 - **Startup Splash:** On boot, the display shows your Pi's IP address so you know exactly where to connect — no SSH or router lookup needed
+- **WiFi Auto-Recovery:** If your WiFi goes down for 30+ minutes (router swap, password change, etc.), InkSlab automatically creates the setup hotspot so you can reconfigure. If your old WiFi comes back, it reconnects on its own — no action needed
+- **Self-Healing:** A boot-time script verifies all critical files and auto-repairs from git if anything is corrupted. Designed for years of unattended operation
 - Runs 24/7 as a desk display, rotating cards every 10 minutes (configurable for day/night)
 
 ### Supported TCGs
@@ -247,6 +249,8 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | WiFi setup not appearing | Make sure you're connected to the `InkSlab-Setup` network. If the setup page doesn't auto-open, go to `http://10.42.0.1` manually. |
 | Wrong WiFi password | The setup page will show an error and let you retry. The InkSlab-Setup network will reappear automatically. |
 | Want to change WiFi | Go to **Settings** > **Change WiFi Network** in the dashboard. The InkSlab will re-enter setup mode. |
+| Got a new router / changed WiFi password | InkSlab will automatically detect the lost connection and re-enter setup mode within ~30 minutes (or ~5 minutes after a reboot). The display will show the setup QR code again. Connect to `InkSlab-Setup` and enter your new WiFi details. |
+| WiFi went out temporarily | No action needed — InkSlab continues showing cards offline and auto-reconnects when your WiFi comes back. |
 | Buttons not responding | Open the dashboard in a **private/incognito window** or clear your browser cache. Old cached JavaScript from a previous version can cause this. |
 
 ---
