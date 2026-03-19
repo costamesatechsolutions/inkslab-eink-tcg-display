@@ -252,6 +252,7 @@ def api_status():
         status.pop('pending', None)
     if status.get('display_updating') and time.time() - status.get('timestamp', 0) > 60:
         status.pop('display_updating', None)
+    status['server_time'] = time.strftime("%-I:%M %p")
     return jsonify(status)
 
 
@@ -2288,9 +2289,12 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <input type="number" id="cfg-night-interval" min="1" max="480" value="60">
     </div>
     <div class="form-group">
-      <label>Timezone (UTC offset, e.g. -5 for EST, +1 for CET)</label>
-      <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="0 = use Pi system time">
-      <small style="color:#6BCCBD;font-size:11px">Leave blank if your Pi's clock already shows the correct local time (e.g. set via Pi Imager)</small>
+      <label>Timezone (UTC offset, e.g. -5 for EST, -6 for CST, -7 for MST, -8 for PST)</label>
+      <div style="background:#1F333F;border-radius:4px;padding:6px 10px;margin-bottom:6px;font-size:12px;color:#6BCCBD">
+        Pi current time: <span id="pi-time" style="font-weight:600;color:#D8E6E4">--:-- --</span>
+        <span style="color:#8899a6;margin-left:6px">— if this looks wrong for your location, set your UTC offset below</span>
+      </div>
+      <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="Leave blank to use Pi system time">
     </div>
     <div class="form-group">
       <label>Day Start (hour, 24h)</label>
@@ -2616,6 +2620,8 @@ function refreshStatus() {
       startMainPoll();
     }
     _lastStatus = d;
+    var piTimeEl = document.getElementById('pi-time');
+    if (piTimeEl && d.server_time) piTimeEl.textContent = d.server_time;
   }).catch(() => {});
 }
 

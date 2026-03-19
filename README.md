@@ -228,8 +228,11 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | `day_interval` | `600` (10 min) | Seconds between cards during the day |
 | `night_interval` | `3600` (1 hr) | Seconds between cards at night |
 | `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |
-| `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid) |
+| `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid, max 5.0) |
 | `collection_only` | `false` | Only show cards marked as owned |
+| `timezone_offset` | `null` | UTC offset in hours for day/night timing (e.g. `-5` for EST, `-6` for CST, `-7` for MST, `-8` for PST). Leave unset if your Pi's clock is already correct |
+
+> **Note for pre-flashed units shipped to customers:** The Pi's system timezone is baked in at flash time. If you flash in California and ship to New York, the recipient's day/night cycle will be 3 hours off. The Settings tab shows the Pi's current time — if it looks wrong, set **Timezone (UTC offset)** to the correct offset for your location.
 
 ---
 
