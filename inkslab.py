@@ -1383,13 +1383,22 @@ def main():
                     except Exception:
                         pass
 
-                # Calculate wait time and next change
+                # Calculate wait time
                 hr = time.localtime().tm_hour
                 wait = config["day_interval"] if config["day_start"] <= hr < config["day_end"] else config["night_interval"]
                 paused = os.path.exists(PAUSE_FILE)
-                next_change = 0 if paused else int(time.time()) + wait
 
-                # Write status BEFORE display refresh so web dashboard updates instantly
+                # If paused and skipping to a new card, reset the pause file to the
+                # full interval for this card so resuming gives a fresh countdown.
+                if paused:
+                    try:
+                        with open(PAUSE_FILE, 'w') as f:
+                            f.write(str(wait))
+                    except OSError:
+                        pass
+
+                # Write status BEFORE display refresh so web dashboard updates instantly.
+                # next_change is 0 here (unknown until render finishes) — set after display.
                 cur_set_id = os.path.basename(os.path.dirname(card_path))
                 cur_card_id = os.path.splitext(os.path.basename(card_path))[0]
                 status_info = {
@@ -1405,7 +1414,7 @@ def main():
                     "total_cards": deck.total,
                     "prev_cards": prev_cards,
                     "next_cards": next_cards,
-                    "next_change": next_change,
+                    "next_change": 0,
                     "paused": paused,
                     "interval": wait,
                     "display_updating": True,
@@ -1423,8 +1432,9 @@ def main():
                     except Exception:
                         pass
 
-                # Display refresh complete — clear the updating flag
+                # Display fully rendered — now start the countdown from the correct time
                 status_info["display_updating"] = False
+                status_info["next_change"] = 0 if paused else int(time.time()) + wait
                 write_status(status_info)
 
                 logger.info(f"Next card in {wait // 60} minutes")
