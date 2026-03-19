@@ -212,15 +212,16 @@ def show_splash_screen(epd, config):
     """Show a branded splash screen with the dashboard URL on the e-ink display.
     Handles full init/display/sleep cycle internally."""
     try:
-        # Wait up to 30s for an IP address (network may still be coming up)
+        # Wait up to 60s for an IP address (DHCP can lag behind WiFi association,
+        # especially on first boot with heavy background activity)
         ip = None
-        for _ in range(6):
+        for _ in range(12):
             ip = get_local_ip()
             if ip:
                 break
             time.sleep(5)
         if not ip:
-            logger.info("No IP address available after 30s, showing splash without URL")
+            logger.info("No IP address available after 60s, showing splash without URL")
             ip = "<no IP yet>"
 
         canvas = Image.new("RGB", (DISPLAY_WIDTH, DISPLAY_HEIGHT), (255, 255, 255))
@@ -297,6 +298,7 @@ def show_splash_screen(epd, config):
         epd.sleep()
         final.close()
         logger.info(f"Splash screen shown: dashboard at {url_text}")
+        return bool(ip and ip != "<no IP yet>")
 
     except Exception as e:
         logger.warning(f"Splash screen skipped: {e}")
@@ -304,6 +306,7 @@ def show_splash_screen(epd, config):
             epd.sleep()
         except Exception:
             pass
+        return False
 
 
 def show_setup_screen(epd, config):
@@ -1215,9 +1218,15 @@ def main():
         # WiFi is working — only show splash if we actually have cards to display.
         # If no cards, skip splash (no-cards screen shows the IP too, avoids extra flash).
         if deck.total > 0:
-            show_splash_screen(epd, config)
+            had_ip = show_splash_screen(epd, config)
             logger.info(f"Splash screen sent — waiting {EINK_RENDER_WAIT}s for e-ink render...")
             time.sleep(EINK_RENDER_WAIT)
+            # If the first splash rendered without an IP (slow DHCP on first boot),
+            # try once more — the IP should be available by now after the render wait.
+            if not had_ip and get_local_ip():
+                logger.info("Re-showing splash — IP now available after render wait")
+                show_splash_screen(epd, config)
+                time.sleep(EINK_RENDER_WAIT)
         else:
             logger.info("WiFi connected but no cards — skipping splash, will show no-cards screen")
     else:
