@@ -55,6 +55,7 @@ DEFAULTS = {
     "color_saturation": 2.5,
     "collection_only": False,
     "slab_header_mode": "normal",
+    "timezone_offset": None,
 }
 
 # Track running download process
@@ -267,15 +268,18 @@ def api_set_config():
     # Validate values to prevent bad config from crashing the display daemon
     try:
         if 'day_interval' in updates:
-            updates['day_interval'] = max(10, min(86400, int(updates['day_interval'])))
+            updates['day_interval'] = max(60, min(86400, int(updates['day_interval'])))
         if 'night_interval' in updates:
-            updates['night_interval'] = max(10, min(86400, int(updates['night_interval'])))
+            updates['night_interval'] = max(60, min(86400, int(updates['night_interval'])))
         if 'day_start' in updates:
             updates['day_start'] = max(0, min(23, int(updates['day_start'])))
         if 'day_end' in updates:
             updates['day_end'] = max(0, min(23, int(updates['day_end'])))
         if 'color_saturation' in updates:
-            updates['color_saturation'] = max(0.0, min(10.0, float(updates['color_saturation'])))
+            updates['color_saturation'] = max(0.5, min(5.0, float(updates['color_saturation'])))
+        if 'timezone_offset' in updates:
+            if updates['timezone_offset'] is not None:
+                updates['timezone_offset'] = max(-12, min(14, int(updates['timezone_offset'])))
         if 'rotation_angle' in updates:
             updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (0, 90, 180, 270) else 270
     except (ValueError, TypeError):
@@ -2284,6 +2288,11 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <input type="number" id="cfg-night-interval" min="1" max="480" value="60">
     </div>
     <div class="form-group">
+      <label>Timezone (UTC offset, e.g. -5 for EST, +1 for CET)</label>
+      <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="0 = use Pi system time">
+      <small style="color:#6BCCBD;font-size:11px">Leave blank if your Pi's clock already shows the correct local time (e.g. set via Pi Imager)</small>
+    </div>
+    <div class="form-group">
       <label>Day Start (hour, 24h)</label>
       <input type="number" id="cfg-day-start" min="0" max="23" value="7">
     </div>
@@ -2314,13 +2323,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div style="background:#1F333F;border-radius:4px;height:8px;margin:8px 0"><div id="update-bar" style="height:100%;border-radius:4px;background:#36A5CA;width:0%;transition:width 0.5s"></div></div>
       <div id="update-stage" style="font-size:12px;color:#6BCCBD;text-align:center"></div>
     </div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card">
     <h3>WiFi Network</h3>
     <div id="wifi-info" style="font-size:13px;color:#6BCCBD;margin-bottom:10px">Checking WiFi...</div>
     <button class="btn btn-secondary btn-block" onclick="changeWifi()">Change WiFi Network</button>
-    <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card" id="admin-panel" style="display:none;border:1px solid #ff6b6b33">
     <h3 style="color:#ff6b6b">Prepare for New Owner</h3>
@@ -2390,13 +2399,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <button class="btn btn-primary" onclick="createCustomFolder()" style="flex:1">Create</button>
     </div>
     <div id="custom-folders"></div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card">
     <h3>Delete Data</h3>
     <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Remove all downloaded card images for a TCG.</p>
     <div id="delete-buttons" class="flex-row" style="flex-wrap:wrap;gap:6px"></div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open a new tab and go to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force refresh. On mobile, open a new tab or use private / incognito.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
 </div>
 
@@ -2704,6 +2713,7 @@ function loadSettings() {
     document.getElementById('cfg-rotation').value = c.rotation_angle;
     document.getElementById('cfg-day-interval').value = Math.round(c.day_interval / 60);
     document.getElementById('cfg-night-interval').value = Math.round(c.night_interval / 60);
+    document.getElementById('cfg-tz-offset').value = c.timezone_offset != null ? c.timezone_offset : '';
     document.getElementById('cfg-day-start').value = c.day_start;
     document.getElementById('cfg-day-end').value = c.day_end;
     document.getElementById('cfg-saturation').value = c.color_saturation;
@@ -2718,6 +2728,7 @@ function saveSettings() {
     rotation_angle: parseInt(document.getElementById('cfg-rotation').value) || 270,
     day_interval: (parseInt(document.getElementById('cfg-day-interval').value) || 10) * 60,
     night_interval: (parseInt(document.getElementById('cfg-night-interval').value) || 60) * 60,
+    timezone_offset: document.getElementById('cfg-tz-offset').value !== '' ? parseInt(document.getElementById('cfg-tz-offset').value) : null,
     day_start: parseInt(document.getElementById('cfg-day-start').value) || 7,
     day_end: parseInt(document.getElementById('cfg-day-end').value) || 23,
     color_saturation: parseFloat(document.getElementById('cfg-saturation').value) || 2.5,
@@ -3055,6 +3066,7 @@ function fmtSizeShort(gb, mb) {
 }
 function loadStorage() {
   fetch(API + '/api/storage').then(function(r) { return r.json(); }).then(function(info) {
+    _storageInfo = info;
     var el = document.getElementById('storage-info');
     if (info._computing) {
       el.innerHTML = '<div style="color:#6BCCBD;text-align:center;padding:12px"><span class="preview-spin" style="display:inline-block;font-size:18px">&#8635;</span><div style="margin-top:6px">Calculating storage...</div></div>';
@@ -3106,6 +3118,7 @@ function loadStorage() {
       html += '<div class="stat"><span class="stat-label">' + name + '</span><span class="stat-value">' + d.card_count + ' cards &middot; ' + d.set_count + ' sets &middot; ' + fmtSize(d.size_gb || 0, d.size_mb || 0) + '</span></div>';
     });
     el.innerHTML = html;
+    loadDlButtons();
   });
 }
 
@@ -3126,6 +3139,10 @@ function setDownloadUI(running, tcg) {
 }
 
 function startDownload(tcg, since) {
+  var existingCount = (_storageInfo && _storageInfo[tcg] && _storageInfo[tcg].card_count) || 0;
+  if (existingCount > 0 && !since) {
+    if (!confirm('You already have ' + existingCount.toLocaleString() + ' ' + tcg.toUpperCase() + ' cards downloaded.\n\nRe-downloading will check for new cards and skip existing ones — it won\'t delete what you have.\n\nContinue?')) return;
+  }
   const body = {tcg: tcg};
   if (since) body.since = parseInt(since);
   fetch(API + '/api/download/start', {method:'POST', body: JSON.stringify(body)})
@@ -3385,7 +3402,30 @@ function editCustomCard(folderId, cardId, name, number, rarity) {
 }
 
 // --- Dynamic TCG UI ---
+var _storageInfo = null;
 var _tcgRegistry = {};
+
+function loadDlButtons() {
+  var dlEl = document.getElementById('dl-buttons');
+  if (!dlEl || !Object.keys(_tcgRegistry).length) return;
+  var storageInfo = _storageInfo || {};
+  dlEl.innerHTML = Object.entries(_tcgRegistry).filter(function(e) { return e[1].download_script; }).map(function(e) {
+    var tcgKey = e[0], tcgName = e[1].name;
+    var existingCount = (storageInfo[tcgKey] && storageInfo[tcgKey].card_count) || 0;
+    var btnLabel = existingCount > 0 ? 'Update ' + tcgName + ' (' + existingCount.toLocaleString() + ' cards already downloaded)' : 'Download ' + tcgName;
+    return '<div style="margin-bottom:6px"><button class="btn btn-primary btn-block" onclick="startDownload(\\'' + tcgKey + '\\')">'+btnLabel+'</button></div>';
+  }).join('');
+  // MTG since-year filter
+  var mtgSince = document.getElementById('dl-mtg-since');
+  if (mtgSince) mtgSince.style.display = _tcgRegistry.mtg ? 'block' : 'none';
+  // Delete buttons
+  var delEl = document.getElementById('delete-buttons');
+  if (delEl) {
+    delEl.innerHTML = Object.entries(_tcgRegistry).map(function(e) {
+      return '<button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteData(\\'' + e[0] + '\\', this)">Delete ' + e[1].name + '</button>';
+    }).join('');
+  }
+}
 
 function buildDynamicUI(registry) {
   _tcgRegistry = registry;
@@ -3399,19 +3439,8 @@ function buildDynamicUI(registry) {
   sel.innerHTML = Object.entries(registry).map(function(e) {
     return '<option value="' + e[0] + '">' + e[1].name + '</option>';
   }).join('');
-  // Download buttons (only for TCGs with download scripts)
-  var dlEl = document.getElementById('dl-buttons');
-  dlEl.innerHTML = Object.entries(registry).filter(function(e) { return e[1].download_script; }).map(function(e) {
-    return '<div style="margin-bottom:6px"><button class="btn btn-primary btn-block" onclick="startDownload(\\'' + e[0] + '\\')">Download ' + e[1].name + '</button></div>';
-  }).join('');
-  // Show MTG since-year filter only if MTG is in the registry
-  var mtgSince = document.getElementById('dl-mtg-since');
-  if (mtgSince) mtgSince.style.display = registry.mtg ? 'block' : 'none';
-  // Delete buttons
-  var delEl = document.getElementById('delete-buttons');
-  delEl.innerHTML = Object.entries(registry).map(function(e) {
-    return '<button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteData(\\'' + e[0] + '\\', this)">Delete ' + e[1].name + '</button>';
-  }).join('');
+  // Download and delete buttons
+  loadDlButtons();
 }
 
 // --- Init ---

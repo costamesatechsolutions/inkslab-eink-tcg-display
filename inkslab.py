@@ -34,6 +34,7 @@ DEFAULTS = {
     "color_saturation": 2.5,
     "collection_only": False,
     "slab_header_mode": "normal",
+    "timezone_offset": None,
 }
 
 # --- DYNAMIC TCG REGISTRY ---
@@ -1406,7 +1407,11 @@ def main():
                         pass
 
                 # Calculate wait time
-                hr = time.localtime().tm_hour
+                tz_offset = config.get("timezone_offset")
+                if tz_offset is not None:
+                    hr = (time.gmtime().tm_hour + int(tz_offset)) % 24
+                else:
+                    hr = time.localtime().tm_hour
                 wait = config["day_interval"] if config["day_start"] <= hr < config["day_end"] else config["night_interval"]
                 paused = os.path.exists(PAUSE_FILE)
 

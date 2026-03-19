@@ -131,7 +131,7 @@ After reboot, InkSlab will either:
 
 The Pi Zero W takes **1–2 minutes** to fully boot and display the first screen. Be patient — the e-ink display won't update until the services are ready.
 
-> **Tip:** If buttons or controls on the dashboard ever stop responding after an update, open the dashboard in a **private/incognito window** (or clear your browser cache). The browser sometimes holds onto old cached JavaScript.
+> **Tip:** If buttons or controls on the dashboard ever stop responding, first **close any extra tabs** — having multiple dashboard tabs open is the most common cause. Then try opening a fresh tab or using Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force-clear the cache. On mobile, try private/incognito mode.
 
 ---
 
@@ -237,11 +237,13 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 
 | Problem | Fix |
 |---------|-----|
-| Can't find the dashboard | The IP is shown on the e-ink display at boot. If you missed it, restart the `inkslab` service or run `hostname -I` on the Pi. You can also check your router's admin page. |
+| Can't find the dashboard | The IP is shown on the e-ink display at boot. If you missed it, run `sudo systemctl restart inkslab` to show the splash screen again, or run `hostname -I` via SSH. You can also check your router's admin page. |
 | SSH disconnected after starting services | Normal — the Pi reboots or enters WiFi setup mode. Wait 1–2 minutes, then reconnect. |
 | Display not updating | The Pi Zero takes 1–2 minutes to boot. If still stuck after 3 minutes, check SPI is enabled (`ls /dev/spi*`) and service status (`sudo systemctl status inkslab`). |
 | Washed-out colors | Increase **Color Saturation** in the Settings tab (default 2.5, try 3.0–4.0) |
 | Web dashboard not loading | Run `journalctl -u inkslab_web -f` to check for errors |
+| Web dashboard not loading (restart) | Run `sudo systemctl restart inkslab_web` to restart the dashboard service. If that doesn't help, `sudo systemctl restart inkslab inkslab_web` restarts both. |
+| Can't find the IP address | Check your router's admin page, or SSH in and run `hostname -I`. You can also restart the `inkslab` service to redisplay the splash screen: `sudo systemctl restart inkslab` |
 | Collection mode shows nothing | Mark some cards as owned in the Collection tab first |
 | Services show "masked" | Run: `sudo bash ~/inkslab/scripts/setup.sh` (this removes masked symlinks, installs fresh service files, and reboots) |
 | Download fails or stalls | The Pi Zero has limited RAM. If a massive download (MTG or Pokemon) stalls out, click "Stop Download" and then start it again. It will safely skip over existing files and resume exactly where it left off. |
@@ -251,7 +253,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Want to change WiFi | Go to **Settings** > **Change WiFi Network** in the dashboard. The InkSlab will re-enter setup mode. |
 | Got a new router / changed WiFi password | InkSlab will automatically detect the lost connection and re-enter setup mode within ~30 minutes (or ~5 minutes after a reboot). The display will show the setup QR code again. Connect to `InkSlab-Setup` and enter your new WiFi details. |
 | WiFi went out temporarily | No action needed — InkSlab continues showing cards offline and auto-reconnects when your WiFi comes back. |
-| Buttons not responding | Open the dashboard in a **private/incognito window** or clear your browser cache. Old cached JavaScript from a previous version can cause this. |
+| Buttons not responding | **First: close any extra tabs** — having multiple dashboard tabs open is the most common cause. Then try opening a fresh tab and navigating to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force-clear the cache. On mobile, open a new tab or use private/incognito. |
 
 ---
 
