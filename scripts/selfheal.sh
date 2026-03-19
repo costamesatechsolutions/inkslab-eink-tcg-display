@@ -112,3 +112,5 @@ rm -f /tmp/inkslab_unbox
 # Clean up orphaned .tmp files from interrupted atomic writes
 find /home/pi/inkslab -name '*.tmp' -mmin +5 -delete 2>/dev/null
 find /home/pi -maxdepth 1 -name '*.tmp' -mmin +5 -delete 2>/dev/null
+# Clean up atomic-write temp for status file (always safe to remove on boot)
+rm -f /tmp/inkslab_status.json.tmp

@@ -150,10 +150,16 @@ def load_master_index(library_dir):
 
 
 def write_status(info):
-    """Write current display status for the web dashboard."""
+    """Write current display status for the web dashboard.
+
+    Uses atomic write (tmp + rename) so the web server never reads partial JSON.
+    Both files live in /tmp (same tmpfs), so os.rename() is atomic.
+    """
     try:
-        with open(STATUS_FILE, 'w') as f:
+        tmp = STATUS_FILE + '.tmp'
+        with open(tmp, 'w') as f:
             json.dump(info, f)
+        os.replace(tmp, STATUS_FILE)
     except Exception:
         pass
 
@@ -743,6 +749,7 @@ _PALETTE_IMAGE.putpalette(PALETTE_COLORS + [0, 0, 0] * (256 - len(PALETTE_COLORS
 
 def process_image(img_path, master_index, config):
     """Full image pipeline: layout -> enhance -> dither -> rotate for display."""
+    img = palette_ref = img_dithered = img_rgb = None
     try:
         header_mode = config.get("slab_header_mode", "normal")
         img, info = create_slab_layout(img_path, master_index, header_mode)
@@ -761,17 +768,24 @@ def process_image(img_path, master_index, config):
         # Quantize to 7-color palette with dithering
         palette_ref = create_palette_image()
         img_dithered = img.quantize(palette=palette_ref, dither=Image.Dither.FLOYDSTEINBERG)
-        img.close()
-        palette_ref.close()
+        img.close(); img = None
+        palette_ref.close(); palette_ref = None
 
         img_rgb = img_dithered.convert("RGB")
-        img_dithered.close()
+        img_dithered.close(); img_dithered = None
         final = img_rgb.rotate(config["rotation_angle"], expand=True)
-        img_rgb.close()
+        img_rgb.close(); img_rgb = None
 
         return final, info
     except Exception as e:
         logger.error(f"Image processing error: {e}")
+        # Ensure any intermediate PIL images are freed even on exception
+        for _im in (img, palette_ref, img_dithered, img_rgb):
+            if _im is not None:
+                try:
+                    _im.close()
+                except Exception:
+                    pass
         return None, {}
 
 
