@@ -351,36 +351,70 @@ def api_prev():
 
 @app.route('/api/pause', methods=['POST'])
 def api_pause():
-    """Toggle pause state. Returns new paused state."""
+    """Toggle pause state. Returns new paused state and next_change timestamp."""
+    next_change_out = 0
     if os.path.exists(PAUSE_FILE):
+        # Unpausing — read remaining seconds that were saved when paused
+        remaining = None
+        try:
+            with open(PAUSE_FILE, 'r') as f:
+                val = f.read().strip()
+                remaining = int(val) if val.isdigit() else None
+        except Exception:
+            pass
         try:
             os.remove(PAUSE_FILE)
         except OSError:
             pass
         paused = False
+        try:
+            status = {}
+            if os.path.exists(STATUS_FILE):
+                with open(STATUS_FILE, 'r') as f:
+                    status = json.load(f)
+            status['paused'] = False
+            if remaining is not None:
+                next_change_out = int(time.time()) + remaining
+            elif status.get('interval'):
+                next_change_out = int(time.time()) + status['interval']
+            status['next_change'] = next_change_out
+            with open(STATUS_FILE, 'w') as f:
+                json.dump(status, f)
+        except Exception:
+            pass
     else:
+        # Pausing — snapshot how many seconds are left and write to pause file
+        remaining = None
+        try:
+            status = {}
+            if os.path.exists(STATUS_FILE):
+                with open(STATUS_FILE, 'r') as f:
+                    status = json.load(f)
+            next_change = status.get('next_change', 0)
+            if next_change:
+                remaining = max(0, int(next_change) - int(time.time()))
+            else:
+                remaining = status.get('interval', 600)
+        except Exception:
+            pass
         try:
             with open(PAUSE_FILE, 'w') as f:
-                f.write('1')
+                f.write(str(remaining if remaining is not None else 0))
         except OSError:
             pass
         paused = True
-    # Update status file so web UI reflects immediately
-    try:
-        status = {}
-        if os.path.exists(STATUS_FILE):
-            with open(STATUS_FILE, 'r') as f:
-                status = json.load(f)
-        status['paused'] = paused
-        if not paused and status.get('interval'):
-            status['next_change'] = int(time.time()) + status['interval']
-        elif paused:
+        try:
+            status = {}
+            if os.path.exists(STATUS_FILE):
+                with open(STATUS_FILE, 'r') as f:
+                    status = json.load(f)
+            status['paused'] = True
             status['next_change'] = 0
-        with open(STATUS_FILE, 'w') as f:
-            json.dump(status, f)
-    except Exception:
-        pass
-    return jsonify({"ok": True, "paused": paused})
+            with open(STATUS_FILE, 'w') as f:
+                json.dump(status, f)
+        except Exception:
+            pass
+    return jsonify({"ok": True, "paused": paused, "next_change": next_change_out})
 
 
 @app.route('/api/ip')
@@ -464,7 +498,8 @@ def api_sets():
             owned_count = sum(1 for cid in s["_cids"] if cid in owned_ids)
             result.append({
                 "id": s["id"], "name": s["name"], "year": s["year"],
-                "card_count": s["card_count"], "owned_count": owned_count,
+                "card_count": s["card_count"], "downloaded_count": s["downloaded_count"],
+                "owned_count": owned_count,
             })
         result.sort(key=lambda x: x["year"], reverse=True)
         return jsonify(result)
@@ -484,6 +519,8 @@ def api_sets():
                     card_ids = list(json.load(f).keys())
             except Exception:
                 pass
+        # Count actual image files on disk (may differ from _data.json during partial downloads)
+        downloaded_count = sum(1 for f in os.listdir(set_path) if _is_card_image(f))
         if not card_ids:
             card_ids = [os.path.splitext(f)[0] for f in os.listdir(set_path)
                         if _is_card_image(f)]
@@ -491,11 +528,12 @@ def api_sets():
         info = master.get(d, {})
         sets_data.append({
             "id": d, "name": info.get("name", d), "year": info.get("year", ""),
-            "card_count": len(card_ids), "_cids": card_ids,
+            "card_count": len(card_ids), "downloaded_count": downloaded_count, "_cids": card_ids,
         })
         result.append({
             "id": d, "name": info.get("name", d), "year": info.get("year", ""),
-            "card_count": len(card_ids), "owned_count": owned_count,
+            "card_count": len(card_ids), "downloaded_count": downloaded_count,
+            "owned_count": owned_count,
         })
 
     _cache_set(cache_key, sets_data)
@@ -644,13 +682,22 @@ def api_rarities():
 
     if library and os.path.isdir(library):
         for d in os.listdir(library):
-            data_file = os.path.join(library, d, "_data.json")
+            set_path = os.path.join(library, d)
+            data_file = os.path.join(set_path, "_data.json")
             if not os.path.exists(data_file):
                 continue
+            # Only count cards that are actually downloaded (have image files on disk)
+            try:
+                downloaded = {os.path.splitext(f)[0] for f in os.listdir(set_path)
+                              if _is_card_image(f)}
+            except Exception:
+                downloaded = set()
             try:
                 with open(data_file, 'r') as f:
                     data = json.load(f)
                 for card_id, card in data.items():
+                    if card_id not in downloaded:
+                        continue
                     r = card.get("rarity", "")
                     if r:
                         rarity_counts[r] = rarity_counts.get(r, 0) + 1
@@ -816,15 +863,24 @@ def api_search():
     results = []
     sets_searched = 0
     for d in os.listdir(library):
-        data_file = os.path.join(library, d, "_data.json")
+        set_path = os.path.join(library, d)
+        data_file = os.path.join(set_path, "_data.json")
         if not os.path.exists(data_file):
             continue
         sets_searched += 1
+        # Only include cards that have image files on disk
+        try:
+            downloaded = {os.path.splitext(f)[0] for f in os.listdir(set_path)
+                          if _is_card_image(f)}
+        except Exception:
+            downloaded = set()
         try:
             with open(data_file, 'r') as f:
                 data = json.load(f)
             set_info = master.get(d, {})
             for card_id, card in data.items():
+                if card_id not in downloaded:
+                    continue
                 name = card.get("name", "")
                 if q in name.lower():
                     results.append({
@@ -2218,6 +2274,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div style="background:#1F333F;border-radius:4px;height:8px;margin:8px 0"><div id="update-bar" style="height:100%;border-radius:4px;background:#36A5CA;width:0%;transition:width 0.5s"></div></div>
       <div id="update-stage" style="font-size:12px;color:#6BCCBD;text-align:center"></div>
     </div>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">After an update the page may need a hard refresh — hold Shift and tap reload, or open in a private / incognito window.</p>
   </div>
   <div class="card">
     <h3>WiFi Network</h3>
@@ -2298,6 +2355,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <h3>Delete Data</h3>
     <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Remove all downloaded card images for a TCG.</p>
     <div id="delete-buttons" class="flex-row" style="flex-wrap:wrap;gap:6px"></div>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? Open in a private / incognito window, or do a hard refresh (hold Shift and tap reload).</p>
   </div>
 </div>
 
@@ -2567,13 +2625,9 @@ function togglePause() {
     .then(function(d) {
       updatePauseBtn(d.paused);
       _lastStatus.paused = d.paused;
-      if (d.paused) {
-        _lastStatus.next_change = 0;
-        showToast('Paused');
-      } else {
-        _lastStatus.next_change = Math.floor(Date.now() / 1000) + (_lastStatus.interval || 600);
-        showToast('Resumed');
-      }
+      // Use server-computed next_change so resume preserves remaining time
+      _lastStatus.next_change = d.next_change || 0;
+      showToast(d.paused ? 'Paused' : 'Resumed');
       updateCountdown();
     });
 }
@@ -2705,7 +2759,7 @@ function loadSets() {
             <span class="set-name">${esc(s.name)}</span>
             ${s.owned_count > 0 ? '<span class="badge">' + s.owned_count + '</span>' : ''}
           </span>
-          <span class="set-meta">${esc(s.year)} &middot; ${s.card_count} cards</span>
+          <span class="set-meta">${esc(s.year)} &middot; ${s.downloaded_count != null && s.downloaded_count !== s.card_count ? s.downloaded_count + ' / ' + s.card_count : s.card_count} cards</span>
         </div>
         <div class="set-cards" id="set-${esc(s.id)}"></div>
       </div>

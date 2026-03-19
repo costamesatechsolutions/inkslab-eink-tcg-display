@@ -815,6 +815,11 @@ class ShuffleDeck:
         else:
             random.shuffle(temp)
 
+        # Never let the most recently shown card be the very first card
+        # after a reshuffle — avoids an immediate repeat on small decks.
+        if self.history and len(temp) > 1 and temp[0] == self.history[0]:
+            temp.append(temp.pop(0))
+
         self.deck = temp
         self.total = len(temp)
         logger.info(f"Deck loaded: {self.total} cards")
