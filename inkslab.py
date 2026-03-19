@@ -1192,6 +1192,19 @@ def main():
             # at an unreachable device for another 30 minutes.
             _wifi_down_since = time.time() - (WIFI_WATCHDOG_TIMEOUT - 300)
 
+    # After WiFi associates, DHCP lease assignment can lag a few seconds behind —
+    # especially on a busy first boot (filesystem resize, SSH key gen, etc.).
+    # Wait up to 30s for a real IP before proceeding so the splash screen has it.
+    if wifi_connected:
+        _ip_ready = False
+        for _ in range(6):  # 6 x 5s = 30s
+            if get_local_ip():
+                _ip_ready = True
+                break
+            time.sleep(5)
+        if not _ip_ready:
+            logger.warning("WiFi connected but no IP after 30s — splash may show without address")
+
     # E-ink render time: Spectra 6 (7-color) takes ~30s to physically draw.
     # After that, the user needs time to actually read the screen content.
     EINK_RENDER_TIME = 30   # seconds for e-ink to finish drawing
