@@ -228,7 +228,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 |---------|---------|-------------|
 | `active_tcg` | `"pokemon"` | Which TCG to display (`pokemon`, `mtg`, `lorcana`, `custom`) |
 | `slab_header_mode` | `"normal"` | Slab header style: `"normal"`, `"inverted"`, or `"off"` |
-| `rotation_angle` | `270` | Display rotation (0/90/180/270) |
+| `rotation_angle` | `270` | Display rotation: `270` (Default) or `90` (Upside Down) |
 | `day_interval` | `600` (10 min) | Seconds between cards during the day |
 | `night_interval` | `3600` (1 hr) | Seconds between cards at night |
 | `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |

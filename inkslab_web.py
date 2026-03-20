@@ -2375,7 +2375,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
         <button class="btn btn-secondary btn-sm" onclick="autoDetectTimezone()" style="flex:1;white-space:nowrap">Auto-Detect</button>
       </div>
       <input type="hidden" id="cfg-tz-name" value="">
-      <small style="color:#6BCCBD;font-size:11px">Auto-detect sets your timezone from your phone (handles daylight saving automatically). Leave blank if the Pi's time is already correct.</small>
+      <small style="color:#6BCCBD;font-size:11px">Auto-detected from your phone. Handles daylight saving automatically. You shouldn't need to change this.</small>
     </div>
     <div class="form-group">
       <label>Day Start (hour, 24h)</label>
