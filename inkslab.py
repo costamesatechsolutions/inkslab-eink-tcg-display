@@ -1321,7 +1321,10 @@ def main():
 
                 if action == "unbox":
                     show_unbox_screen(epd, config)
-                    continue
+                    # Hold here until power off — device is ready to ship.
+                    while not _shutdown:
+                        time.sleep(5)
+                    break
 
                 if action == "wifi_connected":
                     # Skip splash — no-cards screen will re-show with the new IP
@@ -1512,7 +1515,11 @@ def main():
 
                 if action == "unbox":
                     show_unbox_screen(epd, config)
-                    continue
+                    # Hold here until power off — device is ready to ship.
+                    # E-ink retains the image, so unplugging preserves the screen.
+                    while not _shutdown:
+                        time.sleep(5)
+                    break
 
                 # Collection content changed — rebuild deck but keep showing current card
                 if action == "collection_changed" and config["collection_only"]:

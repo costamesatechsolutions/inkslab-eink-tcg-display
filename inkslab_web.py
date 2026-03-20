@@ -1484,7 +1484,7 @@ def api_factory_reset():
                 _download_proc.wait(timeout=5)
             except Exception:
                 pass
-    _close_download_log()
+        _close_download_log()
 
     # 1. Forget all saved WiFi profiles (except hotspot)
     try:
@@ -1535,7 +1535,8 @@ def api_factory_reset():
         errors.append(f"Hotspot: {e}")
 
     # 5. Clean up temp files, logs, and user traces
-    _close_download_log()
+    with _download_lock:
+        _close_download_log()
     for tmp_file in [STATUS_FILE, DOWNLOAD_LOG, NEXT_TRIGGER, COLLECTION_TRIGGER,
                      "/tmp/inkslab_prev", "/tmp/inkslab_pause",
                      "/tmp/inkslab_wifi_connected", "/tmp/inkslab_wifi_failed",
