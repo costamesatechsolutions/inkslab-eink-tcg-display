@@ -980,9 +980,10 @@ def wait_with_polling(seconds, config_check_interval=5):
     """
     config = load_config()
     last_config_check = time.time()
-    elapsed = 0
+    start = time.monotonic()
+    paused_total = 0.0
 
-    while (elapsed < seconds or os.path.exists(PAUSE_FILE)) and not _shutdown:
+    while ((time.monotonic() - start - paused_total) < seconds or os.path.exists(PAUSE_FILE)) and not _shutdown:
         # Check for prev trigger
         if os.path.exists(PREV_TRIGGER):
             try:
@@ -1096,9 +1097,9 @@ def wait_with_polling(seconds, config_check_interval=5):
                 logger.debug("WiFi watchdog check failed: %s", e)
 
         time.sleep(1)
-        # Only count elapsed time when not paused
-        if not os.path.exists(PAUSE_FILE):
-            elapsed += 1
+        # Don't count paused time toward the interval
+        if os.path.exists(PAUSE_FILE):
+            paused_total += 1.0
 
     return config, None
 
@@ -1386,7 +1387,7 @@ def main():
                         config, action = wait_with_polling(60)
                         if (config["active_tcg"] != active_tcg
                                 or config["collection_only"] != _deck_collection_only
-                                or action == "collection_changed"):
+                                or (action == "collection_changed" and config["collection_only"])):
                             rebuild_deck()
                             if deck.total == 0:
                                 break  # Back to no-cards loop
@@ -1595,7 +1596,7 @@ def main():
                 new_tcg = config["active_tcg"]
                 needs_rebuild = (new_tcg != active_tcg
                                  or config["collection_only"] != _deck_collection_only
-                                 or action == "collection_changed")
+                                 or (action == "collection_changed" and config["collection_only"]))
                 if needs_rebuild:
                     rebuild_deck(preserve_history=(new_tcg == active_tcg))
                     if deck.total == 0:

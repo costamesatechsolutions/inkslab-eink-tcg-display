@@ -268,9 +268,12 @@ def api_status():
         except Exception:
             status['server_time'] = time.strftime("%-I:%M %p")
     elif tz_offset is not None:
-        utc_now = datetime.datetime.now(datetime.timezone.utc)
-        adjusted = utc_now + datetime.timedelta(hours=int(tz_offset))
-        status['server_time'] = adjusted.strftime("%-I:%M %p")
+        try:
+            utc_now = datetime.datetime.now(datetime.timezone.utc)
+            adjusted = utc_now + datetime.timedelta(hours=int(tz_offset))
+            status['server_time'] = adjusted.strftime("%-I:%M %p")
+        except (ValueError, TypeError):
+            status['server_time'] = time.strftime("%-I:%M %p")
     else:
         status['server_time'] = time.strftime("%-I:%M %p")
     return jsonify(status)
@@ -636,6 +639,8 @@ def api_set_cards(set_id):
 @app.route('/api/collection/toggle', methods=['POST'])
 def api_collection_toggle():
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     card_id = data.get("card_id")
     if not card_id:
         return jsonify({"error": "card_id required"}), 400
@@ -663,6 +668,8 @@ def api_collection_toggle():
 @app.route('/api/collection/toggle_set', methods=['POST'])
 def api_collection_toggle_set():
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     set_id = data.get("set_id")
     owned = data.get("owned", True)
     if not set_id:
@@ -766,12 +773,25 @@ def api_rarities():
 def api_collection_toggle_all():
     """Select or deselect ALL cards for the active TCG in one request."""
     body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid request"}), 400
     owned = body.get("owned", True)
     config = load_config()
     tcg = body.get("tcg", config["active_tcg"])
     library = TCG_LIBRARIES.get(tcg)
     if not library or not os.path.isdir(library):
         return jsonify({"error": "invalid tcg"}), 400
+
+    # Scan filesystem outside lock to avoid blocking other requests
+    all_ids = set()
+    if owned:
+        for d in os.listdir(library):
+            set_path = os.path.join(library, d)
+            if not os.path.isdir(set_path):
+                continue
+            for f in os.listdir(set_path):
+                if _is_card_image(f):
+                    all_ids.add(os.path.splitext(f)[0])
 
     with _collection_lock:
         collection = load_collection()
@@ -782,14 +802,6 @@ def api_collection_toggle_all():
             count = len(collection[tcg])
             collection[tcg] = []
         else:
-            all_ids = set()
-            for d in os.listdir(library):
-                set_path = os.path.join(library, d)
-                if not os.path.isdir(set_path):
-                    continue
-                for f in os.listdir(set_path):
-                    if _is_card_image(f):
-                        all_ids.add(os.path.splitext(f)[0])
             collection[tcg] = list(all_ids)
             count = len(all_ids)
 
@@ -802,6 +814,8 @@ def api_collection_toggle_all():
 def api_collection_toggle_batch():
     """Add or remove a specific list of card_ids in one request."""
     body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid request"}), 400
     card_ids = body.get("card_ids", [])
     owned = body.get("owned", True)
     config = load_config()
@@ -831,6 +845,8 @@ def api_collection_toggle_batch():
 def api_collection_toggle_rarity():
     """Select or deselect all cards of a given rarity. Optionally scoped to a single set."""
     body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid request"}), 400
     rarity = body.get("rarity")
     owned = body.get("owned", True)
     set_id = body.get("set_id")  # optional — None means all sets
@@ -963,6 +979,8 @@ def api_favorites_get():
 def api_favorites_set():
     """Add or remove a favorite name. Also batch-adds/removes all matching card IDs."""
     body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid request"}), 400
     name = body.get("name", "").strip()
     owned = body.get("owned", True)
     if not name:
@@ -1092,8 +1110,8 @@ def api_download_status():
     global _download_proc, _download_tcg
 
     running = False
-    tcg = _download_tcg
     with _download_lock:
+        tcg = _download_tcg
         if _download_proc and _download_proc.poll() is None:
             running = True
         elif _download_proc:
@@ -1209,6 +1227,8 @@ def api_storage():
 @app.route('/api/delete', methods=['POST'])
 def api_delete():
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     tcg = data.get("tcg")
     if not tcg or tcg not in TCG_LIBRARIES:
         return jsonify({"ok": False, "error": "Invalid TCG"}), 400
@@ -1426,6 +1446,8 @@ def api_wifi_connect():
     """Begin connection to a WiFi network (non-blocking)."""
     global _wifi_connect_result
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     ssid = data.get("ssid", "").strip()
     password = data.get("password", "").strip()
 
@@ -1473,7 +1495,7 @@ def api_wifi_disconnect():
 @app.route('/api/factory_reset', methods=['POST'])
 def api_factory_reset():
     """Prepare unit for shipping: forget WiFi, delete card data, reset config."""
-    global _wifi_setup_mode, _wifi_connect_result
+    global _wifi_setup_mode, _wifi_connect_result, _download_proc, _download_tcg
     errors = []
 
     # 0. Stop any running card download before deleting data
@@ -1485,6 +1507,8 @@ def api_factory_reset():
             except Exception:
                 pass
         _close_download_log()
+        _download_proc = None
+        _download_tcg = None
 
     # 1. Forget all saved WiFi profiles (except hotspot)
     try:
@@ -1635,6 +1659,8 @@ def api_custom_folders():
 def api_custom_create_folder():
     """Create a new custom image folder."""
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     name = data.get("name", "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
@@ -1644,7 +1670,10 @@ def api_custom_create_folder():
     if not safe:
         return jsonify({"error": "invalid name"}), 400
     folder = os.path.join(CUSTOM_PATH, safe)
-    os.makedirs(folder, exist_ok=True)
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except OSError as e:
+        return jsonify({"error": f"Cannot create folder: {e}"}), 500
     # Update master_index
     with _custom_lock:
         idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
@@ -1665,6 +1694,8 @@ def api_custom_create_folder():
 def api_custom_rename_folder():
     """Rename a custom set's display name."""
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     folder_id = data.get("id", "")
     new_name = data.get("name", "").strip()
     if not folder_id or not new_name:
@@ -1802,6 +1833,8 @@ def api_custom_upload():
 def api_custom_card_metadata():
     """Edit a card's metadata (name, number, rarity)."""
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     folder_id = data.get("folder", "")
     card_id = data.get("card_id", "")
     if not folder_id or not card_id:
@@ -1835,6 +1868,8 @@ def api_custom_card_metadata():
 def api_custom_set_metadata():
     """Edit a set's display name and year."""
     data = request.get_json(force=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid request"}), 400
     folder_id = data.get("id", "")
     if not folder_id:
         return jsonify({"error": "id required"}), 400
