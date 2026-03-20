@@ -243,27 +243,40 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 
 ## Troubleshooting
 
+> **The fix for almost everything: unplug the InkSlab, wait 10 seconds, plug it back in.** Wait 2 minutes for it to fully boot. This clears any stuck state and triggers automatic self-repair. If something seems wrong, always try this first before anything else.
+
+### Common Issues (no SSH needed)
+
 | Problem | Fix |
 |---------|-----|
-| Can't find the dashboard | The IP is shown on the e-ink display at boot. If you missed it, run `sudo systemctl restart inkslab` to show the splash screen again, or run `hostname -I` via SSH. You can also check your router's admin page. |
-| SSH disconnected after starting services | Normal — the Pi reboots or enters WiFi setup mode. Wait 1–2 minutes, then reconnect. |
-| Display not updating | The Pi Zero takes 1–2 minutes to boot. If still stuck after 3 minutes, check SPI is enabled (`ls /dev/spi*`) and service status (`sudo systemctl status inkslab`). |
-| Washed-out colors | Increase **Color Saturation** in the Settings tab (default 2.5, try 3.0–4.0) |
-| Web dashboard not loading | Run `journalctl -u inkslab_web -f` to check for errors |
-| Web dashboard not loading (restart) | Run `sudo systemctl restart inkslab_web` to restart the dashboard service. If that doesn't help, `sudo systemctl restart inkslab inkslab_web` restarts both. |
-| Can't find the IP address | Check your router's admin page, or SSH in and run `hostname -I`. You can also restart the `inkslab` service to redisplay the splash screen: `sudo systemctl restart inkslab` |
-| Collection mode shows nothing | Mark some cards as owned in the Collection tab first |
-| Services show "masked" | Run: `sudo bash ~/inkslab/scripts/setup.sh` (this removes masked symlinks, installs fresh service files, and reboots) |
-| Download fails or stalls | The Pi Zero has limited RAM. If a massive download (MTG or Pokemon) stalls out, click "Stop Download" and then start it again. It will safely skip over existing files and resume exactly where it left off. |
-| OTA update stuck | If the update progress bar stalls, wait 60 seconds then refresh the page. The services auto-restart via systemd. |
-| Dashboard broken after a large update | If tabs or buttons stop working after updating from a much older version: **1)** Close all dashboard tabs **2)** Open a fresh tab and navigate to the dashboard **3)** If still broken, SSH in and run `sudo systemctl restart inkslab inkslab_web`, then open a fresh tab. The page will always reload fresh after an update going forward. |
-| WiFi setup not appearing | Make sure you're connected to the `InkSlab-Setup` network. If the setup page doesn't auto-open, go to `http://10.42.0.1` manually. |
-| Wrong WiFi password | The setup page will show an error and let you retry. The InkSlab-Setup network will reappear automatically. |
-| Want to change WiFi | Go to **Settings** > **Change WiFi Network** in the dashboard. The InkSlab will re-enter setup mode. |
-| Got a new router / changed WiFi password | InkSlab will automatically detect the lost connection and re-enter setup mode within ~30 minutes (or ~5 minutes after a reboot). The display will show the setup QR code again. Connect to `InkSlab-Setup` and enter your new WiFi details. |
-| WiFi went out temporarily | No action needed — InkSlab continues showing cards offline and auto-reconnects when your WiFi comes back. |
-| Day/night timing is off | Go to **Settings** and tap **Auto-Detect** next to the Timezone field — this sets your timezone from your phone and handles daylight saving automatically. Then tap **Save Settings**. |
-| Buttons not responding | **First: close any extra tabs** — having multiple dashboard tabs open is the most common cause. Then try opening a fresh tab and navigating to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force-clear the cache. On mobile, open a new tab or use private/incognito. |
+| Something seems wrong / nothing is working | **Unplug, wait 10 seconds, plug back in.** Wait 2 minutes. InkSlab self-heals on every boot. |
+| Display is frozen / not changing cards | Unplug, wait 10 seconds, plug back in. Wait 2 minutes for first card to appear. |
+| Can't find the dashboard | The IP address is shown on the e-ink display at boot. If you missed it, unplug and replug — it shows the IP again on startup. Or check your router's admin page for a device named `inkslab`. |
+| Dashboard not loading in browser | Make sure your phone/computer is on the same WiFi as the InkSlab. Try typing the IP address directly (e.g. `http://192.168.1.42`). If still nothing, unplug and replug the InkSlab. |
+| Buttons not responding | **First: close any extra tabs** — having multiple dashboard tabs open is the most common cause. Open a single fresh tab and navigate to the dashboard address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac). On mobile, open a new tab or use private/incognito. |
+| Dashboard broken after a large update | Close all dashboard tabs. Open a single fresh tab and go to the dashboard. If still broken, unplug and replug the InkSlab, then open a fresh tab. |
+| Washed-out or dull colors | Go to **Settings** and increase **Color Saturation** (default 2.5, try 3.0–4.0). Tap Save Settings. |
+| Day/night timing is off | Go to **Settings** and tap **Auto-Detect** next to Timezone. Then tap **Save Settings**. |
+| Collection mode shows nothing | Go to the **Collection** tab and mark some cards as owned first. |
+| WiFi setup page not appearing | Make sure you're connected to the `InkSlab-Setup` WiFi network (no password). If the page doesn't open automatically, go to `http://10.42.0.1` in your browser. |
+| Wrong WiFi password entered | The setup page will show an error. Just try again — the `InkSlab-Setup` network stays up so you can re-enter the correct password. |
+| Want to change WiFi networks | Go to **Settings** > **Change WiFi Network**. |
+| Got a new router / changed WiFi password | InkSlab detects this automatically within ~30 minutes and re-enters setup mode. The display will show the setup screen. Connect your phone to `InkSlab-Setup` and enter your new WiFi details. To speed this up: unplug and replug — it detects the issue faster on boot. |
+| WiFi went out temporarily | No action needed — InkSlab keeps showing cards and reconnects automatically when WiFi comes back. |
+| Download fails or stalls | Click **Stop Download**, then start it again. It safely skips files already downloaded and picks up where it left off. |
+| OTA update stuck | Wait 60 seconds, then close the tab and open a fresh one. The update runs in the background and the services restart automatically. |
+
+### Advanced (SSH required)
+
+These are rare situations that require SSH access. If you don't have SSH set up, unplugging and replugging fixes most things.
+
+| Problem | Fix |
+|---------|-----|
+| Services show "masked" or won't start | `sudo bash ~/inkslab/scripts/setup.sh` — removes broken service files, reinstalls, and reboots. |
+| Display not updating after 5+ minutes | Check SPI is enabled: `ls /dev/spi*` — should show files. If missing, run `sudo raspi-config nonint do_spi 0 && sudo reboot`. |
+| Check service logs | `journalctl -u inkslab -f` (display) or `journalctl -u inkslab_web -f` (dashboard) |
+| Manually restart services | `sudo systemctl restart inkslab inkslab_web` |
+| SSH disconnected after setup | Normal — the Pi reboots as part of setup. Wait 2 minutes and reconnect. |
 
 ---
 
