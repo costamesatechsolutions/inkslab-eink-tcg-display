@@ -315,7 +315,7 @@ def api_set_config():
                 except Exception:
                     updates['timezone_name'] = None
         if 'rotation_angle' in updates:
-            updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (0, 90, 180, 270) else 270
+            updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (90, 270) else 270
     except (ValueError, TypeError):
         return jsonify({"error": "invalid value"}), 400
     if 'active_tcg' in updates:
@@ -345,12 +345,13 @@ def api_set_config():
             _write_status(status)
         except Exception:
             pass
-    # Wake the display daemon immediately so it picks up the change within ~1 second
-    try:
-        with open(NEXT_TRIGGER, 'w') as f:
-            f.write('1')
-    except OSError:
-        pass
+    # Only wake the display daemon for changes that affect what's shown
+    if 'active_tcg' in updates or 'rotation_angle' in updates or 'color_saturation' in updates or 'slab_header_mode' in updates or 'collection_only' in updates:
+        try:
+            with open(NEXT_TRIGGER, 'w') as f:
+                f.write('1')
+        except OSError:
+            pass
     return jsonify(config)
 
 
@@ -2350,7 +2351,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     </div>
     <div class="form-group">
       <label>Rotation Angle</label>
-      <select id="cfg-rotation"><option value="0">0</option><option value="90">90</option><option value="180">180</option><option value="270">270</option></select>
+      <select id="cfg-rotation"><option value="270">Default</option><option value="90">Upside Down</option></select>
     </div>
     <div class="form-group">
       <label>Day Interval (minutes)</label>
