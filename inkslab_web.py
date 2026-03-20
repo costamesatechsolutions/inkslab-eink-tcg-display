@@ -3235,7 +3235,7 @@ function setDownloadUI(running, tcg) {
 function startDownload(tcg, since) {
   var existingCount = (_storageInfo && _storageInfo[tcg] && _storageInfo[tcg].card_count) || 0;
   if (existingCount > 0 && !since) {
-    if (!confirm('You already have ' + existingCount.toLocaleString() + ' ' + tcg.toUpperCase() + ' cards downloaded.\n\nRe-downloading will check for new cards and skip existing ones — it won\\'t delete what you have.\n\nContinue?')) return;
+    if (!confirm('You already have ' + existingCount.toLocaleString() + ' ' + tcg.toUpperCase() + ' cards downloaded.\\n\\nRe-downloading will check for new cards and skip existing ones — it won\\'t delete what you have.\\n\\nContinue?')) return;
   }
   const body = {tcg: tcg};
   if (since) body.since = parseInt(since);
