@@ -2430,7 +2430,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <div id="tab-collection" class="panel">
   <div class="card">
     <h3>My Cards</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like — cards you own, favorites, a themed set, or a wish list. Enable "My Cards mode" in Settings to only show these.</p>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like — favorites, a themed set, a wish list, or cards you collect. Enable "My Cards mode" in Settings to only show these.</p>
     <button class="btn btn-secondary btn-sm" onclick="clearCollection()">Clear All</button>
   </div>
   <div class="card">

@@ -15,7 +15,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 - **Slab Header Modes:** Normal (white bg), Inverted (black bg), or Off (full-screen card art)
 - **Web Dashboard:** Control everything from your phone or browser at `http://<your-pi-ip>`
 - **Live Player Controls:** Pause, play, skip, or go back, complete with an "Up Next" queue and countdown timer
-- **My Cards & Search:** Curate your own card list — cards you own, a wish list, favorites, or any theme you like. Search for a card (e.g., "Pikachu") and instantly add *all* variations across every set.
+- **My Cards & Search:** Curate your own card list — favorites, a wish list, cards you collect, or any theme you like. Search for a card (e.g., "Pikachu") and instantly add *all* variations across every set.
 - **Rarity Filtering:** Select or deselect all cards of a specific rarity (e.g., "Mythic Rare" or "Illustration Rare") across every set with one tap
 - **Smart Shuffle:** Remembers recently shown cards and pushes them to the back of the deck upon reshuffling so you always see fresh art
 - **Custom Images:** Upload your own images and organize them into sets with optional metadata
