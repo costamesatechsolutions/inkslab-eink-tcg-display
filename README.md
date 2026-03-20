@@ -182,7 +182,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ```bash
 ssh pi@<your-pi-ip>
 cd ~/inkslab
-git pull
+git fetch origin && git reset --hard origin/master
 sudo rm -f /etc/systemd/system/inkslab.service /etc/systemd/system/inkslab_web.service /etc/systemd/system/inkslab-selfheal.service /etc/systemd/system/inkslab-selfheal.timer
 sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service ~/inkslab/inkslab-selfheal.service ~/inkslab/inkslab-selfheal.timer /etc/systemd/system/
 sudo systemctl daemon-reload

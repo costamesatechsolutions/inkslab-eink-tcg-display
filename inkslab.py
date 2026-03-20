@@ -966,7 +966,8 @@ def _wifi_setup_wait_loop(epd, config):
                 else:
                     # Still can't connect — restart hotspot and try again later
                     logger.info("Reconnect failed — restarting hotspot for another cycle")
-                    wifi_manager.start_hotspot()
+                    if not wifi_manager.start_hotspot():
+                        logger.error("Failed to start hotspot — retrying in next cycle")
                     show_setup_screen(epd, config)
                     _wifi_wait = 0  # Another 10 min in hotspot mode
 
@@ -1081,7 +1082,8 @@ def wait_with_polling(seconds, config_check_interval=5):
                     logger.warning("WiFi watchdog: down for %d min — auto-entering hotspot setup",
                                    int((now - _wifi_down_since) / 60))
                     _wifi_down_since = 0  # Reset so we don't re-trigger immediately
-                    wifi_manager.start_hotspot()
+                    if not wifi_manager.start_hotspot():
+                        logger.error("WiFi watchdog: failed to start hotspot — will retry next cycle")
                     # Signal web server to enter setup mode
                     try:
                         with open(WATCHDOG_SETUP_FLAG, 'w') as f:
@@ -1160,7 +1162,7 @@ def main():
                 time.sleep(delay)
             else:
                 logger.error("Display init failed after 5 attempts. Exiting.")
-                return
+                sys.exit(1)
 
     # Check WiFi status — show setup screen or splash screen.
     # IMPORTANT: Use has_saved_wifi_profile() as the primary signal, NOT is_wifi_connected().

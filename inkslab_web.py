@@ -3675,7 +3675,14 @@ if __name__ == '__main__':
         elif not is_connected:
             _wifi_setup_mode = True
             _logger.info("No WiFi profile found — entering setup mode")
-            wifi_manager.start_hotspot()
+            # Retry hotspot startup — critical for first boot, user has no other way in
+            for _hotspot_attempt in range(1, 4):
+                if wifi_manager.start_hotspot():
+                    break
+                _logger.warning("Hotspot start attempt %d/3 failed, retrying in 5s...", _hotspot_attempt)
+                time.sleep(5)
+            else:
+                _logger.error("Hotspot failed after 3 attempts — user may need to power cycle")
         else:
             _logger.info("WiFi connected — serving dashboard")
     except Exception as e:
