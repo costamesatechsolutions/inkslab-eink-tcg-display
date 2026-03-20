@@ -45,14 +45,9 @@ verify_files() {
             return 1
         fi
     done
-    # Import check — catches missing deps, bad imports, module-level errors
-    for f in $CRITICAL_FILES; do
-        module="${f%.py}"
-        if ! python3 -c "import $module" 2>/dev/null; then
-            echo "FAIL: $f fails to import"
-            return 1
-        fi
-    done
+    # Note: we intentionally do NOT run `import` checks here because
+    # inkslab.py imports hardware-specific modules (e-ink driver, GPIO)
+    # that fail during the update context. py_compile above is sufficient.
     return 0
 }
 

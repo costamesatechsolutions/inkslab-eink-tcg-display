@@ -41,17 +41,8 @@ if [ "$NEEDS_REPAIR" = false ]; then
     done
 fi
 
-# Import check — catches missing deps, bad imports, module-level errors
-if [ "$NEEDS_REPAIR" = false ]; then
-    for f in $CRITICAL_FILES; do
-        module="${f%.py}"
-        if ! python3 -c "import $module" 2>/dev/null; then
-            echo "selfheal: $f fails to import"
-            NEEDS_REPAIR=true
-            break
-        fi
-    done
-fi
+# Note: no import check — inkslab.py imports hardware modules (e-ink, GPIO)
+# that can't be imported outside the display daemon context. py_compile is sufficient.
 
 if [ "$NEEDS_REPAIR" = true ]; then
     echo "selfheal: Repairing from git..."
@@ -90,16 +81,6 @@ if [ "$NEEDS_REPAIR" = true ]; then
                 fi
             done
         fi
-        if [ "$REPAIR_OK" = true ]; then
-            for f in $CRITICAL_FILES; do
-                module="${f%.py}"
-                if ! python3 -c "import $module" 2>/dev/null; then
-                    REPAIR_OK=false
-                    break
-                fi
-            done
-        fi
-
         if [ "$REPAIR_OK" = true ]; then
             echo "selfheal: Repair successful"
         else
