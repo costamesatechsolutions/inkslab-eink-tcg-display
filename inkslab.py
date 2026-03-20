@@ -1522,6 +1522,11 @@ def main():
                         time.sleep(5)
                     break
 
+                # Collection changed but collection mode is off — ignore, resume timer
+                while action == "collection_changed" and not config["collection_only"]:
+                    remaining = max(0, next_change - int(time.time())) if next_change else wait
+                    config, action = wait_with_polling(remaining)
+
                 # Collection content changed — rebuild deck but keep showing current card
                 if action == "collection_changed" and config["collection_only"]:
                     rebuild_deck(preserve_history=True)
