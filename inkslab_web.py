@@ -345,8 +345,9 @@ def api_set_config():
             _write_status(status)
         except Exception:
             pass
-    # Only wake the display daemon for changes that affect what's shown
-    if 'active_tcg' in updates or 'rotation_angle' in updates or 'color_saturation' in updates or 'slab_header_mode' in updates or 'collection_only' in updates:
+    # Only wake the display daemon for TCG switch or collection mode toggle —
+    # other settings (rotation, saturation, header) take effect on the next natural card change
+    if 'active_tcg' in updates or 'collection_only' in updates:
         try:
             with open(NEXT_TRIGGER, 'w') as f:
                 f.write('1')
