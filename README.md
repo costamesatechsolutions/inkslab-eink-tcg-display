@@ -256,6 +256,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Services show "masked" | Run: `sudo bash ~/inkslab/scripts/setup.sh` (this removes masked symlinks, installs fresh service files, and reboots) |
 | Download fails or stalls | The Pi Zero has limited RAM. If a massive download (MTG or Pokemon) stalls out, click "Stop Download" and then start it again. It will safely skip over existing files and resume exactly where it left off. |
 | OTA update stuck | If the update progress bar stalls, wait 60 seconds then refresh the page. The services auto-restart via systemd. |
+| Dashboard broken after a large update | If tabs or buttons stop working after updating from a much older version: **1)** Close all dashboard tabs **2)** Open a fresh tab and navigate to the dashboard **3)** If still broken, SSH in and run `sudo systemctl restart inkslab inkslab_web`, then open a fresh tab. The page will always reload fresh after an update going forward. |
 | WiFi setup not appearing | Make sure you're connected to the `InkSlab-Setup` network. If the setup page doesn't auto-open, go to `http://10.42.0.1` manually. |
 | Wrong WiFi password | The setup page will show an error and let you retry. The InkSlab-Setup network will reappear automatically. |
 | Want to change WiFi | Go to **Settings** > **Change WiFi Network** in the dashboard. The InkSlab will re-enter setup mode. |

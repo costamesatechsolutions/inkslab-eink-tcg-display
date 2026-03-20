@@ -3337,8 +3337,9 @@ function checkUpdateStatus() {
     stage.textContent = d.message || d.stage || 'Working...';
     if (d.stage === 'complete') {
       clearInterval(_updatePoll); _updatePoll = null;
-      showToast('Update complete!');
-      setTimeout(function() { location.reload(); }, 2000);
+      stage.textContent = 'Done! Reloading...';
+      // Force cache-bypass reload so new JS is always loaded after an update
+      setTimeout(function() { location.href = location.origin + '/?updated=' + Date.now(); }, 2000);
     } else if (d.error) {
       clearInterval(_updatePoll); _updatePoll = null;
       stage.textContent = d.message || 'Update failed';
