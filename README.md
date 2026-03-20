@@ -149,6 +149,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 - **Active TCG:** Switch between Pokemon, MTG, Lorcana, or Custom
 - **Slab Header Mode:** Choose between Normal (white background), Inverted (black background), or Off (full-screen card art with no header)
 - Change how often cards rotate (separate day and night intervals to save power)
+- **Timezone Auto-Detect:** Tap one button to set day/night timing to your local timezone (handles daylight saving)
 - Adjust display rotation and color saturation (boost colors for the e-paper display)
 - Enable **Collection Only** mode to restrict the display to cards you've marked as owned
 - **Software Update:** Check for and install OTA updates directly from the web dashboard
@@ -182,6 +183,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ssh pi@<your-pi-ip>
 cd ~/inkslab
 sudo git pull
+sudo rm -f /etc/systemd/system/inkslab.service /etc/systemd/system/inkslab_web.service
 sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl restart inkslab inkslab_web
@@ -230,9 +232,11 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |
 | `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid, max 5.0) |
 | `collection_only` | `false` | Only show cards marked as owned |
-| `timezone_offset` | `null` | UTC offset in hours for day/night timing (e.g. `-5` for EST, `-6` for CST, `-7` for MST, `-8` for PST). Leave unset if your Pi's clock is already correct |
+| `timezone_offset` | `null` | UTC offset for day/night timing. Leave blank if your Pi's clock is correct. Use **Auto-Detect** in Settings to set this from your phone's timezone (handles daylight saving automatically) |
 
-> **Note for pre-flashed units shipped to customers:** The Pi's system timezone is baked in at flash time. If you flash in California and ship to New York, the recipient's day/night cycle will be 3 hours off. The Settings tab shows the Pi's current time — if it looks wrong, set **Timezone (UTC offset)** to the correct offset for your location.
+> **Timezone tip:** The Settings tab shows the Pi's current time. If it looks wrong, tap **Auto-Detect** to set the offset from your phone's timezone — this handles daylight saving time automatically. If your clocks change for DST, re-open Settings and tap Auto-Detect again.
+>
+> **Pre-flashed units:** The Pi's timezone is set when the SD card is flashed. If the recipient is in a different timezone, the day/night cycle may be off. They just need to go to Settings and tap Auto-Detect — it takes 2 seconds.
 
 ---
 

@@ -47,7 +47,7 @@ TCG_REGISTRY = {
 TCG_LIBRARIES = {k: v["path"] for k, v in TCG_REGISTRY.items()}
 
 # Supported image formats
-IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg')
+IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
 CONFIG_FILE = "/home/pi/inkslab_config.json"
 COLLECTION_FILE = "/home/pi/inkslab_collection.json"
@@ -1461,7 +1461,8 @@ def main():
 
                 # Display fully rendered — now start the countdown from the correct time
                 status_info["display_updating"] = False
-                status_info["next_change"] = 0 if paused else int(time.time()) + wait
+                next_change = 0 if paused else int(time.time()) + wait
+                status_info["next_change"] = next_change
                 write_status(status_info)
 
                 logger.info(f"Next card in {wait // 60} minutes")

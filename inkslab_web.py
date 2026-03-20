@@ -44,7 +44,7 @@ TCG_REGISTRY = {
 }
 TCG_LIBRARIES = {k: v["path"] for k, v in TCG_REGISTRY.items()}
 
-IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg')
+IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
 DEFAULTS = {
     "active_tcg": "pokemon",
@@ -232,6 +232,10 @@ def get_local_ip():
     try:
         result = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=5)
         parts = result.stdout.strip().split()
+        # Filter out hotspot IP (10.42.*) to return the real LAN address
+        for ip in parts:
+            if not ip.startswith("10.42."):
+                return ip
         return parts[0] if parts else None
     except Exception:
         return None
@@ -256,7 +260,7 @@ def api_status():
     config = load_config()
     tz_offset = config.get("timezone_offset")
     if tz_offset is not None:
-        utc_now = datetime.datetime.utcnow()
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
         adjusted = utc_now + datetime.timedelta(hours=int(tz_offset))
         status['server_time'] = adjusted.strftime("%-I:%M %p")
     else:
@@ -2297,12 +2301,16 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <input type="number" id="cfg-night-interval" min="1" max="480" value="60">
     </div>
     <div class="form-group">
-      <label>Timezone (UTC offset, e.g. -5 for EST, -6 for CST, -7 for MST, -8 for PST)</label>
+      <label>Timezone</label>
       <div style="background:#1F333F;border-radius:4px;padding:6px 10px;margin-bottom:6px;font-size:12px;color:#6BCCBD">
-        Pi current time: <span id="pi-time" style="font-weight:600;color:#D8E6E4">--:-- --</span>
-        <span style="color:#8899a6;margin-left:6px">— if this looks wrong for your location, set your UTC offset below</span>
+        Pi thinks it is: <span id="pi-time" style="font-weight:600;color:#D8E6E4">--:-- --</span>
+        <span id="tz-hint" style="color:#8899a6;margin-left:6px"></span>
       </div>
-      <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="Leave blank to use Pi system time">
+      <div class="flex-row" style="gap:8px;align-items:center">
+        <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="Leave blank to use Pi system time" style="flex:2">
+        <button class="btn btn-secondary btn-sm" onclick="autoDetectTimezone()" style="flex:1;white-space:nowrap">Auto-Detect</button>
+      </div>
+      <small style="color:#6BCCBD;font-size:11px">Auto-detect uses your phone/browser's timezone (handles daylight saving). Leave blank if the Pi's time is already correct.</small>
     </div>
     <div class="form-group">
       <label>Day Start (hour, 24h)</label>
@@ -2720,6 +2728,27 @@ function switchTCG(tcg, activeBtn) {
 }
 
 // --- Settings ---
+function getBrowserUtcOffset() {
+  return -(new Date().getTimezoneOffset() / 60);
+}
+
+function autoDetectTimezone() {
+  var offset = getBrowserUtcOffset();
+  document.getElementById('cfg-tz-offset').value = offset;
+  var sign = offset >= 0 ? '+' : '';
+  showToast('Set to UTC' + sign + offset + ' (from your browser)');
+}
+
+function updateTimezoneHint() {
+  var hint = document.getElementById('tz-hint');
+  if (!hint) return;
+  var browserOffset = getBrowserUtcOffset();
+  var sign = browserOffset >= 0 ? '+' : '';
+  var tzName = '';
+  try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {}
+  hint.textContent = '— your browser says UTC' + sign + browserOffset + (tzName ? ' (' + tzName + ')' : '');
+}
+
 function loadSettings() {
   fetch(API + '/api/config').then(r => r.json()).then(c => {
     document.getElementById('cfg-tcg').value = c.active_tcg;
@@ -2732,6 +2761,7 @@ function loadSettings() {
     document.getElementById('cfg-day-end').value = c.day_end;
     document.getElementById('cfg-saturation').value = c.color_saturation;
     document.getElementById('cfg-collection').checked = c.collection_only;
+    updateTimezoneHint();
   });
 }
 

@@ -99,7 +99,7 @@ def main():
     for s in sets:
         master_index[s['id']] = {
             "name": s['name'],
-            "year": s['releaseDate'][:4]
+            "year": s.get('releaseDate', '')[:4]
         }
 
     index_path = os.path.join(BASE_DIR, "master_index.json")
