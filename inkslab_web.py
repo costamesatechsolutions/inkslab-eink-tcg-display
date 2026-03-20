@@ -2186,8 +2186,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .set-meta { font-size: 11px; color: #6BCCBD; }
 .set-cards { display: none; padding: 0 12px 8px; }
 .set-cards.open { display: block; }
-.card-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #132E3E; font-size: 12px; }
-.card-row label { flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; color: #D8E6E4; }
+.card-row { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid #132E3E; font-size: 12px; }
+.card-row label { cursor: pointer; display: flex; align-items: center; }
+.card-row .card-preview-btn { flex: 1; }
 .card-row input[type=checkbox] { accent-color: #36A5CA; }
 .card-rarity { color: #6BCCBD; font-size: 11px; }
 .rarity-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0 6px; }
@@ -2981,10 +2982,8 @@ function toggleSet(setId) {
     }
     html += cards.map(c => `
       <div class="card-row" data-rarity="${esc(c.rarity)}">
-        <label>
-          <input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleCard('${esc(c.id)}')">
-          <span class="card-preview-btn" onclick="event.preventDefault();showPreview('${esc(c.set_id)}','${esc(c.id)}','${esc(c.name)} #${esc(c.number)}')">#${esc(c.number)} ${esc(c.name)}</span>
-        </label>
+        <label><input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleCard('${esc(c.id)}')"></label>
+        <span class="card-preview-btn" onclick="showPreview('${esc(c.set_id)}','${esc(c.id)}','${esc(c.name)} #${esc(c.number)}')">#${esc(c.number)} ${esc(c.name)}</span>
         <span class="card-rarity">${esc(c.rarity)}</span>
       </div>
     `).join('');
@@ -3161,11 +3160,12 @@ function doSearch() {
       html += '</div>';
       html += '<div style="margin-top:4px">';
       g.cards.forEach(function(c) {
-        html += '<div class="search-result"><label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">';
+        html += '<div class="search-result"><label style="display:inline-flex;align-items:center;cursor:pointer">';
         html += '<input type="checkbox" ' + (c.owned ? 'checked' : '') + ' onchange="toggleCard(\\'' + esc(c.id) + '\\')" style="accent-color:#36A5CA">';
-        html += '<span><span class="card-preview-btn" onclick="event.preventDefault();showPreview(\\'' + esc(c.set_id) + '\\',\\'' + esc(c.id) + '\\',\\'' + esc(c.name) + ' #' + esc(c.number) + '\\')">#' + esc(c.number) + '</span>';
-        html += ' <span class="search-result-set">' + esc(c.set_name) + '</span></span>';
-        html += '</label><span class="search-result-rarity">' + esc(c.rarity) + '</span></div>';
+        html += '</label> ';
+        html += '<span class="card-preview-btn" onclick="showPreview(\\'' + esc(c.set_id) + '\\',\\'' + esc(c.id) + '\\',\\'' + esc(c.name) + ' #' + esc(c.number) + '\\')">#' + esc(c.number) + '</span>';
+        html += ' <span class="search-result-set">' + esc(c.set_name) + '</span>';
+        html += '<span class="search-result-rarity">' + esc(c.rarity) + '</span></div>';
       });
       html += '</div></div>';
     });
