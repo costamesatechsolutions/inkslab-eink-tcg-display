@@ -9,6 +9,7 @@ Access via the IP address shown on startup after enabling the systemd service.
 By Costa Mesa Tech Solutions (a brand of Pine Heights Ventures LLC)
 """
 
+import datetime
 import os
 import json
 import shutil
@@ -252,7 +253,14 @@ def api_status():
         status.pop('pending', None)
     if status.get('display_updating') and time.time() - status.get('timestamp', 0) > 60:
         status.pop('display_updating', None)
-    status['server_time'] = time.strftime("%-I:%M %p")
+    config = load_config()
+    tz_offset = config.get("timezone_offset")
+    if tz_offset is not None:
+        utc_now = datetime.datetime.utcnow()
+        adjusted = utc_now + datetime.timedelta(hours=int(tz_offset))
+        status['server_time'] = adjusted.strftime("%-I:%M %p")
+    else:
+        status['server_time'] = time.strftime("%-I:%M %p")
     return jsonify(status)
 
 
