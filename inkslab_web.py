@@ -1762,8 +1762,10 @@ def api_custom_delete_card(folder, card_id):
         # Then remove image files
         for ext in IMAGE_EXTENSIONS:
             p = os.path.join(folder_path, safe_card + ext)
-            if os.path.exists(p):
+            try:
                 os.remove(p)
+            except OSError:
+                pass
     _cache_invalidate('sets_custom', 'storage')
     return jsonify({"ok": True})
 
