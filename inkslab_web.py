@@ -1069,7 +1069,10 @@ def api_download_start():
         if tcg == "mtg" and since:
             cmd.extend(["--since", str(since)])
 
-        _download_log_fh = open(DOWNLOAD_LOG, 'w')
+        try:
+            _download_log_fh = open(DOWNLOAD_LOG, 'w')
+        except OSError as e:
+            return jsonify({"ok": False, "error": "Failed to open download log."})
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
         try:
@@ -2288,7 +2291,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <div class="tabs">
   <div class="tab active" data-tab="display" onclick="showTab('display')">Display</div>
   <div class="tab" data-tab="settings" onclick="showTab('settings')">Settings</div>
-  <div class="tab" data-tab="collection" onclick="showTab('collection')">Collection</div>
+  <div class="tab" data-tab="collection" onclick="showTab('collection')">My Cards</div>
   <div class="tab" data-tab="downloads" onclick="showTab('downloads')">Downloads</div>
 </div>
 
@@ -2392,7 +2395,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <div class="form-group">
       <div class="toggle">
         <input type="checkbox" id="cfg-collection">
-        <label for="cfg-collection">Show only owned cards (collection mode)</label>
+        <label for="cfg-collection">Show only My Cards (selected cards mode)</label>
       </div>
     </div>
     <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
@@ -2426,13 +2429,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- COLLECTION TAB -->
 <div id="tab-collection" class="panel">
   <div class="card">
-    <h3>My Collection</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Mark the cards you own. Enable "collection mode" in Settings to only display owned cards.</p>
+    <h3>My Cards</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like — cards you own, favorites, a themed set, or a wish list. Enable "My Cards mode" in Settings to only show these.</p>
     <button class="btn btn-secondary btn-sm" onclick="clearCollection()">Clear All</button>
   </div>
   <div class="card">
     <h3>Search Cards</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Find a card by name and add all versions to your collection.</p>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Find a card by name and add all versions to your list.</p>
     <div id="search-filters" class="search-filters" style="display:none"></div>
     <div class="search-wrap">
       <span class="search-icon">&#128269;</span>
@@ -2442,7 +2445,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   </div>
   <div class="card">
     <h3>Filter by Rarity</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Toggle rarities on/off across all sets. Checked = cards of that rarity are in your collection.</p>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Toggle rarities on/off across all sets. Checked = cards of that rarity are in your list.</p>
     <div class="rarity-filter-actions">
       <button class="btn btn-secondary btn-sm" onclick="selectAllRarities(true)">Select All</button>
       <button class="btn btn-secondary btn-sm" onclick="selectAllRarities(false)">Deselect All</button>
@@ -3007,7 +3010,7 @@ function toggleSetAll(setId, owned) {
 }
 
 function clearCollection() {
-  if (!confirm('Clear your entire collection for the active TCG?')) return;
+  if (!confirm('Clear your entire card list for the active TCG?')) return;
   fetch(API + '/api/collection/clear', {method:'POST'}).then(() => { loadSets(); loadRarities(); });
 }
 
@@ -3167,7 +3170,7 @@ function doSearch() {
       var ownedCount = g.cards.filter(function(c) { return c.owned; }).length;
       html += '<div style="border-bottom:1px solid #1F333F;padding:6px 0">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-      html += '<span class="search-result-name">' + esc(g.name) + ' <span style="color:#6BCCBD;font-size:11px;font-weight:400">' + ownedCount + '/' + g.cards.length + ' owned</span></span>';
+      html += '<span class="search-result-name">' + esc(g.name) + ' <span style="color:#6BCCBD;font-size:11px;font-weight:400">' + ownedCount + '/' + g.cards.length + ' selected</span></span>';
       html += '<button class="btn btn-secondary btn-sm" onclick="toggleSearchGroup(this,\\'' + esc(g.name) + '\\',' + (!allOwned) + ')">' + (allOwned ? 'Remove All' : 'Add All') + '</button>';
       html += '</div>';
       html += '<div style="margin-top:4px">';
@@ -3678,7 +3681,25 @@ if __name__ == '__main__':
     except Exception as e:
         _logger.warning("WiFi check failed, skipping setup mode: %s", e)
 
+    def _graceful_shutdown(signum, frame):
+        """Clean up resources on shutdown."""
+        _logger.info("Received signal %s, shutting down...", signum)
+        _close_download_log()
+        with _download_lock:
+            if _download_proc and _download_proc.poll() is None:
+                try:
+                    _download_proc.terminate()
+                except Exception:
+                    pass
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
+
     try:
         app.run(host='0.0.0.0', port=80, debug=False, threaded=True)
+    except (SystemExit, KeyboardInterrupt):
+        _logger.info("Web server stopped")
     except Exception as e:
         _logger.error("Web server crashed: %s", e, exc_info=True)
+    finally:
+        _close_download_log()

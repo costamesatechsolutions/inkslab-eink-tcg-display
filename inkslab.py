@@ -11,6 +11,7 @@ Cards rotate every 10 minutes during the day (7am-11pm) and every hour at night.
 By Costa Mesa Tech Solutions (a brand of Pine Heights Ventures LLC)
 """
 
+import gc
 import sys
 import os
 import time
@@ -500,7 +501,7 @@ def show_no_cards_screen(epd, config, ip=None):
 
         collection_mode = config.get("collection_only", False)
         if collection_mode:
-            draw.text((cx, 115), "No cards in your collection.", fill=(0, 0, 0), font=font_body, anchor="mm")
+            draw.text((cx, 115), "No cards selected yet.", fill=(0, 0, 0), font=font_body, anchor="mm")
         else:
             draw.text((cx, 115), "No cards downloaded yet.", fill=(0, 0, 0), font=font_body, anchor="mm")
 
@@ -519,8 +520,8 @@ def show_no_cards_screen(epd, config, ip=None):
                 qr_img.close()
 
         if collection_mode:
-            draw.text((cx, 430), "Open the Collection tab and", fill=(0, 0, 0), font=font_body, anchor="mm")
-            draw.text((cx, 460), "mark the cards you own.", fill=(0, 0, 0), font=font_body, anchor="mm")
+            draw.text((cx, 430), "Open the My Cards tab and", fill=(0, 0, 0), font=font_body, anchor="mm")
+            draw.text((cx, 460), "pick the cards you want.", fill=(0, 0, 0), font=font_body, anchor="mm")
         else:
             draw.text((cx, 430), "Then tap Downloads and pick", fill=(0, 0, 0), font=font_body, anchor="mm")
             draw.text((cx, 460), "a card game to download.", fill=(0, 0, 0), font=font_body, anchor="mm")
@@ -1126,7 +1127,7 @@ def main():
     if config["collection_only"]:
         loaded = load_collection(active_tcg)
         collection = loaded if loaded else set()
-        logger.info(f"Collection mode: {len(collection)} owned cards")
+        logger.info(f"My Cards mode: {len(collection)} selected cards")
 
     deck = ShuffleDeck(library_dir, collection)
     _deck_collection_only = config["collection_only"]
@@ -1294,7 +1295,7 @@ def main():
                     show_no_cards_screen(epd, config, get_local_ip())
                     _no_cards_shown = True
                 logger.warning(f"No cards found for {active_tcg}. Waiting for downloads...")
-                err_msg = ("Collection mode is on but no cards are selected. Add cards from the Collection tab."
+                err_msg = ("My Cards mode is on but no cards are selected. Add cards from the My Cards tab."
                            if config["collection_only"] else
                            "No cards downloaded yet. Use the Downloads tab to get started.")
                 write_status({
@@ -1480,6 +1481,7 @@ def main():
 
                 logger.info(f"Next card in {wait // 60} minutes")
                 final_img.close()
+                gc.collect()
 
                 # Poll during wait — picks up config changes, skip/prev triggers, and pause
                 config, action = wait_with_polling(wait)

@@ -15,7 +15,7 @@ git config --global safe.directory "$SCRIPT_DIR" 2>/dev/null
 
 # Ensure ~/inkslab symlink exists (for migration from old deep-nested paths)
 INKSLAB_HOME="/home/pi/inkslab"
-if [ "$SCRIPT_DIR" != "$INKSLAB_HOME" ] && [ ! -e "$INKSLAB_HOME" ]; then
+if [ "$SCRIPT_DIR" != "$INKSLAB_HOME" ] && [ ! -e "$INKSLAB_HOME" ] && [ -d "$SCRIPT_DIR" ]; then
     ln -sfn "$SCRIPT_DIR" "$INKSLAB_HOME"
     chown -h pi:pi "$INKSLAB_HOME" 2>/dev/null
     echo "selfheal: Created symlink $INKSLAB_HOME -> $SCRIPT_DIR"
@@ -114,6 +114,12 @@ if [ "$NEEDS_REPAIR" = true ]; then
         rm -f /etc/systemd/system/inkslab_web.service
         cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service 2>/dev/null
     fi
+    if [ -f "$SCRIPT_DIR/inkslab-selfheal.service" ] && [ -f "$SCRIPT_DIR/inkslab-selfheal.timer" ]; then
+        rm -f /etc/systemd/system/inkslab-selfheal.service /etc/systemd/system/inkslab-selfheal.timer
+        cp "$SCRIPT_DIR/inkslab-selfheal.service" /etc/systemd/system/inkslab-selfheal.service 2>/dev/null
+        cp "$SCRIPT_DIR/inkslab-selfheal.timer" /etc/systemd/system/inkslab-selfheal.timer 2>/dev/null
+        systemctl enable inkslab-selfheal.timer 2>/dev/null
+    fi
     systemctl daemon-reload 2>/dev/null
 else
     echo "selfheal: All files OK"
@@ -164,7 +170,8 @@ JEOF
 fi
 
 # Periodic git garbage collection (keeps .git small over years of updates)
-git gc --auto 2>/dev/null
+# Timeout prevents slow GC from delaying boot on Pi Zero
+timeout 15 git gc --auto 2>/dev/null || true
 
 # Clean up orphaned .tmp files from interrupted atomic writes
 find /home/pi/inkslab -name '*.tmp' -mmin +5 -delete 2>/dev/null

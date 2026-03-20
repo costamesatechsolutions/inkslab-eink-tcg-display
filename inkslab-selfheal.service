@@ -1,0 +1,8 @@
+[Unit]
+Description=InkSlab Self-Heal Check (Periodic)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/pi/inkslab/scripts/selfheal.sh
+WorkingDirectory=/home/pi/inkslab

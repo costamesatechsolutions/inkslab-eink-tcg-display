@@ -58,26 +58,41 @@ def check_disk_space():
         return True  # Don't block on check failure
 
 
-def download_file(url, filepath):
-    """Download a file, skipping if it already exists. Writes to temp file first."""
+def download_file(url, filepath, max_retries=3):
+    """Download a file, skipping if it already exists. Writes to temp file first.
+    Retries on failure with exponential backoff."""
     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
         return "EXISTS"
     tmp = filepath + ".tmp"
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code == 200:
-            with open(tmp, 'wb') as f:
-                f.write(r.content)
-            if os.path.getsize(tmp) > 0:
-                os.rename(tmp, filepath)
-                return "DOWNLOADED"
-            os.remove(tmp)
-            return "FAIL: empty response"
-        return f"HTTP {r.status_code}"
-    except Exception as e:
+    last_error = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=15)
+            if r.status_code == 200:
+                with open(tmp, 'wb') as f:
+                    f.write(r.content)
+                if os.path.getsize(tmp) > 0:
+                    os.rename(tmp, filepath)
+                    return "DOWNLOADED"
+                os.remove(tmp)
+                last_error = "empty response"
+            elif r.status_code == 429:
+                wait = 2 * attempt
+                print(f"     Rate limited, waiting {wait}s (retry {attempt}/{max_retries})...")
+                time.sleep(wait)
+                continue
+            else:
+                last_error = f"HTTP {r.status_code}"
+        except Exception as e:
+            last_error = str(e)
         if os.path.exists(tmp):
-            os.remove(tmp)
-        return f"FAIL: {e}"
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        if attempt < max_retries:
+            time.sleep(2 * attempt)
+    return f"FAIL: {last_error}"
 
 
 def main():
@@ -86,12 +101,22 @@ def main():
     print("=== Pokemon Card Downloader ===")
     print("1. Fetching master set list...")
 
-    try:
-        r = requests.get(SETS_URL, headers=HEADERS, timeout=30)
-        r.raise_for_status()
-        sets = r.json()
-    except Exception as e:
-        print(f"Error fetching sets: {e}")
+    sets = None
+    for attempt in range(1, 4):
+        try:
+            r = requests.get(SETS_URL, headers=HEADERS, timeout=30)
+            r.raise_for_status()
+            sets = r.json()
+            break
+        except Exception as e:
+            if attempt < 3:
+                wait = 2 * attempt
+                print(f"   Attempt {attempt} failed ({e}), retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"Error fetching sets after 3 attempts: {e}")
+                return
+    if sets is None:
         return
 
     # Build master_index.json
@@ -123,12 +148,19 @@ def main():
 
         print(f"[{i + 1}/{total_sets}] {set_name}...")
 
-        try:
-            r = requests.get(f"{CARDS_BASE_URL}{set_id}.json", headers=HEADERS, timeout=30)
-            r.raise_for_status()
-            cards = r.json()
-        except Exception:
-            print(f"  > Error fetching card list. Skipping.")
+        cards = None
+        for attempt in range(1, 4):
+            try:
+                r = requests.get(f"{CARDS_BASE_URL}{set_id}.json", headers=HEADERS, timeout=30)
+                r.raise_for_status()
+                cards = r.json()
+                break
+            except Exception as e:
+                if attempt < 3:
+                    time.sleep(2 * attempt)
+                else:
+                    print(f"  > Error fetching card list after 3 attempts. Skipping.")
+        if cards is None:
             continue
 
         # Build _data.json for this set

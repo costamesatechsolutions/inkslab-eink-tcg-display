@@ -1,6 +1,6 @@
 [Unit]
 Description=InkSlab Web Dashboard
-After=network-online.target NetworkManager.service
+After=network-online.target NetworkManager.service inkslab.service
 Wants=network-online.target NetworkManager.service
 
 [Service]

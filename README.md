@@ -1,6 +1,6 @@
 # InkSlab — e-Ink TCG Card Display
 
-A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gathering, and Disney Lorcana cards in a graded-slab style layout. Upload your own custom images too. Control everything from your phone — switch between TCGs, download cards, curate your collection by rarity, and more.
+A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gathering, and Disney Lorcana cards in a graded-slab style layout. Upload your own custom images too. Control everything from your phone — switch between TCGs, download cards, curate your card list by rarity, and more.
 
 **No command line needed.** Pre-flashed units have built-in WiFi setup — just power on, connect to the InkSlab network, and pick your WiFi. Everything else runs through a clean web dashboard — including software updates.
 
@@ -15,7 +15,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 - **Slab Header Modes:** Normal (white bg), Inverted (black bg), or Off (full-screen card art)
 - **Web Dashboard:** Control everything from your phone or browser at `http://<your-pi-ip>`
 - **Live Player Controls:** Pause, play, skip, or go back, complete with an "Up Next" queue and countdown timer
-- **Collection Mode & Search:** Only display cards you own. Search for a card (e.g., "Pikachu") and instantly add *all* variations across every set to your collection.
+- **My Cards & Search:** Curate your own card list — cards you own, a wish list, favorites, or any theme you like. Search for a card (e.g., "Pikachu") and instantly add *all* variations across every set.
 - **Rarity Filtering:** Select or deselect all cards of a specific rarity (e.g., "Mythic Rare" or "Illustration Rare") across every set with one tap
 - **Smart Shuffle:** Remembers recently shown cards and pushes them to the back of the deck upon reshuffling so you always see fresh art
 - **Custom Images:** Upload your own images and organize them into sets with optional metadata
@@ -153,13 +153,13 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 - Change how often cards rotate (separate day and night intervals to save power)
 - **Timezone Auto-Detect:** Tap one button to set day/night timing to your local timezone (handles daylight saving)
 - Adjust display rotation and color saturation (boost colors for the e-paper display)
-- Enable **Collection Only** mode to restrict the display to cards you've marked as owned
+- Enable **My Cards Only** mode to restrict the display to cards you've selected
 - **Software Update:** Check for and install OTA updates directly from the web dashboard
 - **WiFi Network:** View current connection status and change WiFi networks without SSH
 
-### Collection Tab
-- Browse every downloaded set and toggle ownership. Tap any card name to view a high-res preview modal
-- **Search Cards:** Search for any character or card and instantly add all versions of it to your collection
+### My Cards Tab
+- Browse every downloaded set and select the cards you want to display. Tap any card name to view a high-res preview modal
+- **Search Cards:** Search for any character or card and instantly add all versions to your list
 - **Filter by Rarity:** Pick a rarity from the dropdown (e.g., "Rare Holo", "Mythic Rare", "Enchanted") and select/deselect all matching cards across every set at once
 - **Set Management:** Select/Deselect an entire set, or use the per-set rarity chips to bulk-manage specific rarities within a single set
 
@@ -233,7 +233,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | `night_interval` | `3600` (1 hr) | Seconds between cards at night |
 | `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |
 | `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid, max 5.0) |
-| `collection_only` | `false` | Only show cards marked as owned |
+| `collection_only` | `false` | Only show cards you've selected in My Cards |
 | `timezone_name` | `null` | IANA timezone name (e.g. `"America/New_York"`). Set automatically via the **Auto-Detect** button in Settings. Handles daylight saving time automatically — set it once and forget it |
 | `timezone_offset` | `null` | Manual UTC offset fallback (e.g. `-5`). Only used if `timezone_name` is not set |
 
@@ -259,7 +259,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Dashboard broken after a large update | Close all dashboard tabs. Open a single fresh tab and go to the dashboard. If still broken, unplug and replug the InkSlab, then open a fresh tab. |
 | Washed-out or dull colors | Go to **Settings** and increase **Color Saturation** (default 2.5, try 3.0–4.0). Tap Save Settings. |
 | Day/night timing is off | Go to **Settings** and tap **Auto-Detect** next to Timezone. Then tap **Save Settings**. |
-| Collection mode shows nothing | Go to the **Collection** tab and mark some cards as owned first. |
+| My Cards mode shows nothing | Go to the **My Cards** tab and select some cards first. |
 | WiFi setup page not appearing | Make sure you're connected to the `InkSlab-Setup` WiFi network (no password). If the page doesn't open automatically, go to `http://10.42.0.1` in your browser. |
 | Wrong WiFi password entered | The setup page will show an error. Just try again — the `InkSlab-Setup` network stays up so you can re-enter the correct password. |
 | Want to change WiFi networks | Go to **Settings** > **Change WiFi Network**. |

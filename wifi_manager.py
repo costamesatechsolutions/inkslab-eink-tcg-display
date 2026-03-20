@@ -55,12 +55,21 @@ def _split_nmcli_escaped(line):
 
 
 def _has_real_ip():
-    """Fallback check: does the Pi have a non-hotspot, non-loopback IP?"""
+    """Fallback check: does wlan0 have a non-hotspot, non-loopback IP?"""
     try:
-        result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5)
-        for ip in result.stdout.strip().split():
-            if ip and not ip.startswith("127.") and not ip.startswith("10.42."):
-                return True
+        # Check wlan0 specifically to avoid false positives from other interfaces
+        result = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show", "dev", "wlan0"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.strip().splitlines():
+            # Format: "3: wlan0    inet 192.168.1.50/24 ..."
+            parts = line.split()
+            for i, part in enumerate(parts):
+                if part == "inet" and i + 1 < len(parts):
+                    ip = parts[i + 1].split("/")[0]
+                    if ip and not ip.startswith("127.") and not ip.startswith("10.42."):
+                        return True
     except Exception:
         pass
     return False
@@ -274,15 +283,20 @@ def connect_to_network(ssid, password):
         logger.info("Connection attempt %d for '%s'...", attempt_num, ssid)
         return _run_nmcli(args, timeout=60)
 
-    rc, out, err = _attempt(1)
-    if rc != 0:
-        # Clean up partial profile and retry once after a longer delay
-        _run_nmcli(["con", "delete", "id", ssid], timeout=10)
-        logger.warning("Attempt 1 failed (%s), retrying in 10s...", err or out)
-        time.sleep(10)
-        _run_nmcli(["dev", "wifi", "rescan"], timeout=15)
-        time.sleep(3)
-        rc, out, err = _attempt(2)
+    max_attempts = 3
+    for attempt_num in range(1, max_attempts + 1):
+        rc, out, err = _attempt(attempt_num)
+        if rc == 0:
+            break
+        if attempt_num < max_attempts:
+            # Clean up partial profile and retry with increasing delay
+            _run_nmcli(["con", "delete", "id", ssid], timeout=10)
+            delay = 10 * attempt_num  # 10s, 20s
+            logger.warning("Attempt %d failed (%s), retrying in %ds...",
+                           attempt_num, err or out, delay)
+            time.sleep(delay)
+            _run_nmcli(["dev", "wifi", "rescan"], timeout=15)
+            time.sleep(3)
 
     if rc != 0:
         error_msg = err or out or "Connection failed"
@@ -295,7 +309,7 @@ def connect_to_network(ssid, password):
             error_msg = "Could not remove old profile — try again"
         elif "timeout" in error_msg.lower():
             error_msg = "Connection timed out — check password and try again"
-        logger.error("WiFi connection failed after 2 attempts: %s", error_msg)
+        logger.error("WiFi connection failed after %d attempts: %s", max_attempts, error_msg)
         # Final cleanup of any profile left behind
         _run_nmcli(["con", "delete", "id", ssid], timeout=10)
         return False, error_msg

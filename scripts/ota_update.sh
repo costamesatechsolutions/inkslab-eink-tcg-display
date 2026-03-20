@@ -88,9 +88,20 @@ fi
 # Save current commit hash for rollback
 PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null)
 
-# Stage 1: Fetch latest from remote
+# Stage 1: Fetch latest from remote (retry up to 3 times for flaky connections)
 write_status "fetching" "Checking for updates..." ""
-if ! timeout 60 git fetch origin 2>&1; then
+FETCH_OK=false
+for i in 1 2 3; do
+    if timeout 60 git fetch origin 2>&1; then
+        FETCH_OK=true
+        break
+    fi
+    if [ "$i" -lt 3 ]; then
+        write_status "fetching" "Retrying connection (attempt $((i+1))/3)..." ""
+        sleep $((5 * i))
+    fi
+done
+if [ "$FETCH_OK" = false ]; then
     write_status "error" "Could not reach update server. Check your internet connection." "true"
     exit 1
 fi
@@ -142,11 +153,17 @@ if [ -f "$SCRIPT_DIR/inkslab_web.service" ]; then
     rm -f /etc/systemd/system/inkslab_web.service
     cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service 2>/dev/null
 fi
+if [ -f "$SCRIPT_DIR/inkslab-selfheal.service" ] && [ -f "$SCRIPT_DIR/inkslab-selfheal.timer" ]; then
+    rm -f /etc/systemd/system/inkslab-selfheal.service /etc/systemd/system/inkslab-selfheal.timer
+    cp "$SCRIPT_DIR/inkslab-selfheal.service" /etc/systemd/system/inkslab-selfheal.service 2>/dev/null
+    cp "$SCRIPT_DIR/inkslab-selfheal.timer" /etc/systemd/system/inkslab-selfheal.timer 2>/dev/null
+    systemctl enable inkslab-selfheal.timer 2>/dev/null
+fi
 systemctl daemon-reload 2>/dev/null
 
 # Stage 3: Restart display daemon
 write_status "restarting_display" "Restarting display service..." ""
-if ! sudo systemctl restart inkslab 2>&1; then
+if ! systemctl restart inkslab 2>&1; then
     write_status "error" "Display service restart failed. Try rebooting." "true"
     exit 1
 fi
@@ -156,7 +173,7 @@ write_status "restarting_web" "Restarting web dashboard... Reconnecting shortly.
 sleep 1
 
 # Stage 5: Restart web dashboard (this kills the Flask process, but we're detached)
-if ! sudo systemctl restart inkslab_web 2>&1; then
+if ! systemctl restart inkslab_web 2>&1; then
     write_status "error" "Web service restart failed. Try rebooting." "true"
     exit 1
 fi

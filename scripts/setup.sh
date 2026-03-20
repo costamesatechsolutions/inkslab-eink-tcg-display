@@ -10,8 +10,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Step 1: Install Python dependencies
 echo "[1/5] Installing dependencies..."
-apt-get install -y python3-pip python3-pil python3-numpy python3-lgpio python3-flask python3-requests >/dev/null 2>&1
-pip3 install --break-system-packages qrcode 2>/dev/null || pip3 install qrcode 2>/dev/null || true
+apt-get install -y python3-pip python3-pil python3-numpy python3-lgpio python3-spidev python3-gpiozero python3-flask python3-requests python3-qrcode git >/dev/null 2>&1
+
+# Fallback: if python3-qrcode wasn't available via apt, try pip
+if ! python3 -c "import qrcode" 2>/dev/null; then
+    pip3 install --break-system-packages qrcode 2>/dev/null || pip3 install qrcode 2>/dev/null || true
+fi
+
+# Verify critical imports
+for mod in PIL numpy flask requests qrcode; do
+    if ! python3 -c "import $mod" 2>/dev/null; then
+        echo "  WARNING: Python module '$mod' failed to install."
+    fi
+done
 echo "  Done."
 
 # Step 2: Remove any existing service files (rm -f handles symlinks correctly)
@@ -22,14 +33,18 @@ echo "  Done."
 echo "[2/5] Installing service files..."
 rm -f /etc/systemd/system/inkslab.service
 rm -f /etc/systemd/system/inkslab_web.service
+rm -f /etc/systemd/system/inkslab-selfheal.service
+rm -f /etc/systemd/system/inkslab-selfheal.timer
 cp "$SCRIPT_DIR/inkslab.service" /etc/systemd/system/inkslab.service
 cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service
+cp "$SCRIPT_DIR/inkslab-selfheal.service" /etc/systemd/system/inkslab-selfheal.service
+cp "$SCRIPT_DIR/inkslab-selfheal.timer" /etc/systemd/system/inkslab-selfheal.timer
 echo "  Done."
 
 # Step 3: Enable services
 echo "[3/5] Enabling services..."
 systemctl daemon-reload
-systemctl enable inkslab inkslab_web
+systemctl enable inkslab inkslab_web inkslab-selfheal.timer
 echo "  Done."
 
 # Step 4: System hardening
