@@ -19,7 +19,7 @@ if ! python3 -c "import qrcode" 2>/dev/null; then
 fi
 
 # Verify critical imports
-for mod in PIL numpy flask requests qrcode; do
+for mod in PIL numpy flask requests qrcode spidev gpiozero; do
     if ! python3 -c "import $mod" 2>/dev/null; then
         echo "  WARNING: Python module '$mod' failed to install."
     fi

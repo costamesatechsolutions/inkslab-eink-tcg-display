@@ -125,8 +125,9 @@ else
     echo "selfheal: All files OK"
 fi
 
-# Clean up any stale lock/temp files from previous crashes
-rm -f /tmp/inkslab_update.lock
+# Clean up any stale lock/temp files from previous crashes.
+# Skip update status file if an OTA update is in progress — the update script
+# manages its own lifecycle and selfheal runs mid-update when services restart.
 rm -f /tmp/inkslab_next
 rm -f /tmp/inkslab_prev
 rm -f /tmp/inkslab_pause
@@ -136,9 +137,13 @@ rm -f /tmp/inkslab_wifi_failed
 rm -f /tmp/inkslab_wifi_setup
 rm -f /tmp/inkslab_unbox
 rm -f /tmp/inkslab_watchdog_setup
-rm -f /tmp/inkslab_update_status.json
 rm -f /tmp/inkslab_status.json
 rm -f /tmp/inkslab_download.log
+# Only clean update lock/status if no update is actively running
+if [ ! -f /tmp/inkslab_update.lock ] || ! kill -0 "$(cat /tmp/inkslab_update.lock 2>/dev/null)" 2>/dev/null; then
+    rm -f /tmp/inkslab_update.lock
+    rm -f /tmp/inkslab_update_status.json
+fi
 
 # Ensure hardware watchdog is enabled
 if [ -f /boot/firmware/config.txt ]; then
