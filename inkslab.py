@@ -35,6 +35,7 @@ DEFAULTS = {
     "collection_only": False,
     "slab_header_mode": "normal",
     "timezone_offset": None,
+    "timezone_name": None,
 }
 
 # --- DYNAMIC TCG REGISTRY ---
@@ -1406,9 +1407,17 @@ def main():
                     except Exception:
                         pass
 
-                # Calculate wait time
+                # Calculate wait time — use timezone_name (DST-aware) > timezone_offset > system localtime
+                tz_name = config.get("timezone_name")
                 tz_offset = config.get("timezone_offset")
-                if tz_offset is not None:
+                if tz_name:
+                    try:
+                        from zoneinfo import ZoneInfo
+                        from datetime import datetime, timezone as dt_tz
+                        hr = datetime.now(ZoneInfo(tz_name)).hour
+                    except Exception:
+                        hr = time.localtime().tm_hour
+                elif tz_offset is not None:
                     hr = (time.gmtime().tm_hour + int(tz_offset)) % 24
                 else:
                     hr = time.localtime().tm_hour

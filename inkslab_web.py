@@ -57,6 +57,7 @@ DEFAULTS = {
     "collection_only": False,
     "slab_header_mode": "normal",
     "timezone_offset": None,
+    "timezone_name": None,
 }
 
 # Track running download process
@@ -258,8 +259,15 @@ def api_status():
     if status.get('display_updating') and time.time() - status.get('timestamp', 0) > 60:
         status.pop('display_updating', None)
     config = load_config()
+    tz_name = config.get("timezone_name")
     tz_offset = config.get("timezone_offset")
-    if tz_offset is not None:
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            status['server_time'] = datetime.datetime.now(ZoneInfo(tz_name)).strftime("%-I:%M %p")
+        except Exception:
+            status['server_time'] = time.strftime("%-I:%M %p")
+    elif tz_offset is not None:
         utc_now = datetime.datetime.now(datetime.timezone.utc)
         adjusted = utc_now + datetime.timedelta(hours=int(tz_offset))
         status['server_time'] = adjusted.strftime("%-I:%M %p")
@@ -293,6 +301,16 @@ def api_set_config():
         if 'timezone_offset' in updates:
             if updates['timezone_offset'] is not None:
                 updates['timezone_offset'] = max(-12, min(14, int(updates['timezone_offset'])))
+        if 'timezone_name' in updates:
+            tn = updates['timezone_name']
+            if tn is not None:
+                # Validate timezone name exists
+                try:
+                    from zoneinfo import ZoneInfo
+                    ZoneInfo(str(tn))
+                    updates['timezone_name'] = str(tn)
+                except Exception:
+                    updates['timezone_name'] = None
         if 'rotation_angle' in updates:
             updates['rotation_angle'] = int(updates['rotation_angle']) if int(updates['rotation_angle']) in (0, 90, 180, 270) else 270
     except (ValueError, TypeError):
@@ -2310,7 +2328,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
         <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="Leave blank to use Pi system time" style="flex:2">
         <button class="btn btn-secondary btn-sm" onclick="autoDetectTimezone()" style="flex:1;white-space:nowrap">Auto-Detect</button>
       </div>
-      <small style="color:#6BCCBD;font-size:11px">Auto-detect uses your phone/browser's timezone (handles daylight saving). Leave blank if the Pi's time is already correct.</small>
+      <input type="hidden" id="cfg-tz-name" value="">
+      <small style="color:#6BCCBD;font-size:11px">Auto-detect sets your timezone from your phone (handles daylight saving automatically). Leave blank if the Pi's time is already correct.</small>
     </div>
     <div class="form-group">
       <label>Day Start (hour, 24h)</label>
@@ -2735,18 +2754,27 @@ function getBrowserUtcOffset() {
 function autoDetectTimezone() {
   var offset = getBrowserUtcOffset();
   document.getElementById('cfg-tz-offset').value = offset;
+  var tzName = '';
+  try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {}
+  document.getElementById('cfg-tz-name').value = tzName;
   var sign = offset >= 0 ? '+' : '';
-  showToast('Set to UTC' + sign + offset + ' (from your browser)');
+  showToast('Set to ' + (tzName || 'UTC' + sign + offset) + ' — tap Save Settings to apply');
 }
 
 function updateTimezoneHint() {
   var hint = document.getElementById('tz-hint');
   if (!hint) return;
-  var browserOffset = getBrowserUtcOffset();
-  var sign = browserOffset >= 0 ? '+' : '';
-  var tzName = '';
-  try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {}
-  hint.textContent = '— your browser says UTC' + sign + browserOffset + (tzName ? ' (' + tzName + ')' : '');
+  var savedName = document.getElementById('cfg-tz-name').value;
+  if (savedName) {
+    hint.textContent = '— using ' + savedName + ' (auto DST)';
+    hint.style.color = '#6BCCBD';
+  } else {
+    var browserOffset = getBrowserUtcOffset();
+    var sign = browserOffset >= 0 ? '+' : '';
+    var tzName = '';
+    try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {}
+    hint.textContent = '— tap Auto-Detect to set ' + (tzName || 'UTC' + sign + browserOffset);
+  }
 }
 
 function loadSettings() {
@@ -2757,11 +2785,26 @@ function loadSettings() {
     document.getElementById('cfg-day-interval').value = Math.round(c.day_interval / 60);
     document.getElementById('cfg-night-interval').value = Math.round(c.night_interval / 60);
     document.getElementById('cfg-tz-offset').value = c.timezone_offset != null ? c.timezone_offset : '';
+    document.getElementById('cfg-tz-name').value = c.timezone_name || '';
     document.getElementById('cfg-day-start').value = c.day_start;
     document.getElementById('cfg-day-end').value = c.day_end;
     document.getElementById('cfg-saturation').value = c.color_saturation;
     document.getElementById('cfg-collection').checked = c.collection_only;
     updateTimezoneHint();
+    // Auto-detect timezone on first load if not set — just works for shipped units
+    if (!c.timezone_name && !c.timezone_offset) {
+      var tzName = '';
+      try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e) {}
+      if (tzName) {
+        var offset = getBrowserUtcOffset();
+        document.getElementById('cfg-tz-offset').value = offset;
+        document.getElementById('cfg-tz-name').value = tzName;
+        // Auto-save so they don't have to tap anything
+        var cfg = {timezone_name: tzName, timezone_offset: offset};
+        fetch(API + '/api/config', {method:'POST', body: JSON.stringify(cfg)});
+        updateTimezoneHint();
+      }
+    }
   });
 }
 
@@ -2773,6 +2816,7 @@ function saveSettings() {
     day_interval: (parseInt(document.getElementById('cfg-day-interval').value) || 10) * 60,
     night_interval: (parseInt(document.getElementById('cfg-night-interval').value) || 60) * 60,
     timezone_offset: document.getElementById('cfg-tz-offset').value !== '' ? parseInt(document.getElementById('cfg-tz-offset').value) : null,
+    timezone_name: document.getElementById('cfg-tz-name').value || null,
     day_start: parseInt(document.getElementById('cfg-day-start').value) || 7,
     day_end: parseInt(document.getElementById('cfg-day-end').value) || 23,
     color_saturation: parseFloat(document.getElementById('cfg-saturation').value) || 2.5,

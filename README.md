@@ -232,11 +232,12 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |
 | `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid, max 5.0) |
 | `collection_only` | `false` | Only show cards marked as owned |
-| `timezone_offset` | `null` | UTC offset for day/night timing. Leave blank if your Pi's clock is correct. Use **Auto-Detect** in Settings to set this from your phone's timezone (handles daylight saving automatically) |
+| `timezone_name` | `null` | IANA timezone name (e.g. `"America/New_York"`). Set automatically via the **Auto-Detect** button in Settings. Handles daylight saving time automatically — set it once and forget it |
+| `timezone_offset` | `null` | Manual UTC offset fallback (e.g. `-5`). Only used if `timezone_name` is not set |
 
-> **Timezone tip:** The Settings tab shows the Pi's current time. If it looks wrong, tap **Auto-Detect** to set the offset from your phone's timezone — this handles daylight saving time automatically. If your clocks change for DST, re-open Settings and tap Auto-Detect again.
+> **Timezone tip:** The Settings tab shows the Pi's current time and an Auto-Detect button. Tap it once to set your timezone from your phone — it detects your full timezone (e.g., "America/New_York") and handles daylight saving automatically. You never need to touch it again, even when clocks change.
 >
-> **Pre-flashed units:** The Pi's timezone is set when the SD card is flashed. If the recipient is in a different timezone, the day/night cycle may be off. They just need to go to Settings and tap Auto-Detect — it takes 2 seconds.
+> **Pre-flashed units:** The Pi's timezone is set when the SD card is flashed. If the recipient is in a different timezone, they just need to go to Settings and tap Auto-Detect — it takes 2 seconds and they'll never need to think about it again.
 
 ---
 
@@ -260,6 +261,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | Want to change WiFi | Go to **Settings** > **Change WiFi Network** in the dashboard. The InkSlab will re-enter setup mode. |
 | Got a new router / changed WiFi password | InkSlab will automatically detect the lost connection and re-enter setup mode within ~30 minutes (or ~5 minutes after a reboot). The display will show the setup QR code again. Connect to `InkSlab-Setup` and enter your new WiFi details. |
 | WiFi went out temporarily | No action needed — InkSlab continues showing cards offline and auto-reconnects when your WiFi comes back. |
+| Day/night timing is off | Go to **Settings** and tap **Auto-Detect** next to the Timezone field — this sets your timezone from your phone and handles daylight saving automatically. Then tap **Save Settings**. |
 | Buttons not responding | **First: close any extra tabs** — having multiple dashboard tabs open is the most common cause. Then try opening a fresh tab and navigating to the same address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force-clear the cache. On mobile, open a new tab or use private/incognito. |
 
 ---
