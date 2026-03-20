@@ -2606,7 +2606,7 @@ function renderQueue(d) {
   if (next.length) {
     nextWrap.style.display = 'block';
     document.getElementById('q-next-list').innerHTML = next.map(function(c) {
-      return '<div class="q-card" onclick="showPreview(\\'' + esc(c.set_id) + '\\',\\'' + esc(c.card_id) + '\\',\\'' + esc(c.card_num) + ' ' + esc(c.set_info) + '\\')">'
+      return '<div class="q-card card-preview-btn" data-set="' + esc(c.set_id) + '" data-card="' + esc(c.card_id) + '" data-label="' + esc(c.card_num) + ' ' + esc(c.set_info) + '">'
         + '<img class="q-thumb" src="/api/card_image/' + encodeURIComponent(tcg) + '/' + encodeURIComponent(c.set_id) + '/' + encodeURIComponent(c.card_id) + '" onerror="this.style.display=\\'none\\'">'
         + '<div class="q-num">' + esc(c.card_num) + '</div>'
         + '<div class="q-rarity">' + esc(c.rarity || '') + '</div></div>';
@@ -2615,7 +2615,7 @@ function renderQueue(d) {
   if (prev.length) {
     prevWrap.style.display = 'block';
     document.getElementById('q-prev-list').innerHTML = prev.map(function(c) {
-      return '<div class="q-card" onclick="showPreview(\\'' + esc(c.set_id) + '\\',\\'' + esc(c.card_id) + '\\',\\'' + esc(c.card_num) + ' ' + esc(c.set_info) + '\\')">'
+      return '<div class="q-card card-preview-btn" data-set="' + esc(c.set_id) + '" data-card="' + esc(c.card_id) + '" data-label="' + esc(c.card_num) + ' ' + esc(c.set_info) + '">'
         + '<img class="q-thumb" src="/api/card_image/' + encodeURIComponent(tcg) + '/' + encodeURIComponent(c.set_id) + '/' + encodeURIComponent(c.card_id) + '" onerror="this.style.display=\\'none\\'">'
         + '<div class="q-num">' + esc(c.card_num) + '</div>'
         + '<div class="q-rarity">' + esc(c.rarity || '') + '</div></div>';
@@ -2983,7 +2983,7 @@ function toggleSet(setId) {
       <div class="card-row" data-rarity="${esc(c.rarity)}">
         <label>
           <input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleCard('${esc(c.id)}')">
-          <span class="card-preview-btn" onclick="event.stopPropagation();event.preventDefault();showPreview('${esc(c.set_id)}','${esc(c.id)}','${esc(c.name)} #${esc(c.number)}')">#${esc(c.number)} ${esc(c.name)}</span>
+          <span class="card-preview-btn" data-set="${esc(c.set_id)}" data-card="${esc(c.id)}" data-label="${esc(c.name)} #${esc(c.number)}">#${esc(c.number)} ${esc(c.name)}</span>
         </label>
         <span class="card-rarity">${esc(c.rarity)}</span>
       </div>
@@ -3100,6 +3100,15 @@ function showCurrentPreview() {
 function closePreview() {
   document.getElementById('preview-modal').classList.remove('open');
 }
+// Delegated click handler for all card preview buttons (uses data attributes
+// instead of inline onclick to avoid quote-escaping issues with card names)
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.card-preview-btn[data-set]');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  showPreview(btn.dataset.set, btn.dataset.card, btn.dataset.label, btn.dataset.tcg);
+});
 
 // --- Search ---
 var _searchTimer = null;
@@ -3163,7 +3172,7 @@ function doSearch() {
       g.cards.forEach(function(c) {
         html += '<div class="search-result"><label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">';
         html += '<input type="checkbox" ' + (c.owned ? 'checked' : '') + ' onchange="toggleCard(\\'' + esc(c.id) + '\\')" style="accent-color:#36A5CA">';
-        html += '<span><span class="card-preview-btn" onclick="event.stopPropagation();event.preventDefault();showPreview(\\'' + esc(c.set_id) + '\\',\\'' + esc(c.id) + '\\',\\'' + esc(c.name) + ' #' + esc(c.number) + '\\')">#' + esc(c.number) + '</span>';
+        html += '<span><span class="card-preview-btn" data-set="' + esc(c.set_id) + '" data-card="' + esc(c.id) + '" data-label="' + esc(c.name) + ' #' + esc(c.number) + '">#' + esc(c.number) + '</span>';
         html += ' <span class="search-result-set">' + esc(c.set_name) + '</span></span>';
         html += '</label><span class="search-result-rarity">' + esc(c.rarity) + '</span></div>';
       });
@@ -3436,7 +3445,7 @@ function _loadCustomFolderContent(folderId, el) {
     if (cards.length) {
       cards.forEach(c => {
         html += '<div class="card-row"><label style="flex:1;cursor:pointer">';
-        html += '<span class="card-preview-btn" onclick="showPreview(\\'' + esc(c.set_id) + '\\',\\'' + esc(c.id) + '\\',\\'' + esc(c.name||'') + '\\',\\'custom\\')">#' + esc(c.number) + ' ' + esc(c.name) + '</span>';
+        html += '<span class="card-preview-btn" data-set="' + esc(c.set_id) + '" data-card="' + esc(c.id) + '" data-label="' + esc(c.name||'') + '" data-tcg="custom">#' + esc(c.number) + ' ' + esc(c.name) + '</span>';
         html += '</label>';
         html += '<span style="display:flex;gap:4px;align-items:center">';
         html += '<span class="card-rarity">' + esc(c.rarity || '') + '</span>';
