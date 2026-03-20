@@ -283,10 +283,19 @@ def connect_to_network(ssid, password):
         logger.info("Connection attempt %d for '%s'...", attempt_num, ssid)
         return _run_nmcli(args, timeout=60)
 
+    # Errors that mean "wrong password" — no point retrying with the same creds
+    _password_errors = ("secrets were required", "no suitable", "psk",
+                        "802-11-wireless-security")
+
     max_attempts = 3
     for attempt_num in range(1, max_attempts + 1):
         rc, out, err = _attempt(attempt_num)
         if rc == 0:
+            break
+        # Don't retry on wrong-password errors — fail fast so user can re-enter
+        combined = (err or out or "").lower()
+        if any(phrase in combined for phrase in _password_errors):
+            logger.warning("Password/auth error on attempt %d, not retrying", attempt_num)
             break
         if attempt_num < max_attempts:
             # Clean up partial profile and retry with increasing delay
