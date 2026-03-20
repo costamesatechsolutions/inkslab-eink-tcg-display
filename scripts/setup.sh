@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Step 1: Install Python dependencies
 echo "[1/5] Installing dependencies..."
+apt-get update -qq >/dev/null 2>&1
 apt-get install -y python3-pip python3-pil python3-numpy python3-lgpio python3-spidev python3-gpiozero python3-flask python3-requests python3-qrcode git >/dev/null 2>&1
 
 # Fallback: if python3-qrcode wasn't available via apt, try pip

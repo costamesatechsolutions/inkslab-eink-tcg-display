@@ -110,13 +110,11 @@ sudo reboot
 After reboot, SSH back in and run:
 
 ```bash
-# Install all required packages
-sudo apt-get update
-sudo apt-get install -y python3-pil python3-numpy python3-spidev python3-gpiozero python3-lgpio python3-requests python3-flask python3-qrcode git
+# Install git if not already present (it's pre-installed on most Pi OS images)
+sudo apt-get update -qq && sudo apt-get install -y git
 
 # Clone InkSlab
 git clone https://github.com/costamesatechsolutions/inkslab-eink-tcg-display.git ~/inkslab
-cd ~/inkslab
 ```
 
 ### Step 3 — Run Setup
@@ -125,7 +123,7 @@ cd ~/inkslab
 sudo bash ~/inkslab/scripts/setup.sh
 ```
 
-This installs dependencies, configures the services, and reboots. Your SSH session will disconnect — this is normal.
+This installs all dependencies, configures the services, and reboots. Your SSH session will disconnect — this is normal.
 
 After reboot, InkSlab will either:
 - **Show the WiFi setup screen** if no WiFi is saved — connect your phone to the `InkSlab-Setup` network and follow the on-screen instructions
@@ -184,7 +182,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ```bash
 ssh pi@<your-pi-ip>
 cd ~/inkslab
-sudo git pull
+git pull
 sudo rm -f /etc/systemd/system/inkslab.service /etc/systemd/system/inkslab_web.service /etc/systemd/system/inkslab-selfheal.service /etc/systemd/system/inkslab-selfheal.timer
 sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service ~/inkslab/inkslab-selfheal.service ~/inkslab/inkslab-selfheal.timer /etc/systemd/system/
 sudo systemctl daemon-reload
