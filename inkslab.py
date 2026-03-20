@@ -1413,7 +1413,7 @@ def main():
                 if tz_name:
                     try:
                         from zoneinfo import ZoneInfo
-                        from datetime import datetime, timezone as dt_tz
+                        from datetime import datetime
                         hr = datetime.now(ZoneInfo(tz_name)).hour
                     except Exception:
                         hr = time.localtime().tm_hour
