@@ -185,9 +185,10 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ssh pi@<your-pi-ip>
 cd ~/inkslab
 sudo git pull
-sudo rm -f /etc/systemd/system/inkslab.service /etc/systemd/system/inkslab_web.service
-sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service /etc/systemd/system/
+sudo rm -f /etc/systemd/system/inkslab.service /etc/systemd/system/inkslab_web.service /etc/systemd/system/inkslab-selfheal.service /etc/systemd/system/inkslab-selfheal.timer
+sudo cp ~/inkslab/inkslab.service ~/inkslab/inkslab_web.service ~/inkslab/inkslab-selfheal.service ~/inkslab/inkslab-selfheal.timer /etc/systemd/system/
 sudo systemctl daemon-reload
+sudo systemctl enable inkslab-selfheal.timer
 sudo systemctl restart inkslab inkslab_web
 ```
 
@@ -229,8 +230,8 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 | `active_tcg` | `"pokemon"` | Which TCG to display (`pokemon`, `mtg`, `lorcana`, `custom`) |
 | `slab_header_mode` | `"normal"` | Slab header style: `"normal"`, `"inverted"`, or `"off"` |
 | `rotation_angle` | `270` | Display rotation: `270` (Default) or `90` (Upside Down) |
-| `day_interval` | `600` (10 min) | Seconds between cards during the day |
-| `night_interval` | `3600` (1 hr) | Seconds between cards at night |
+| `day_interval` | `600` (10 min) | Seconds between cards during the day. The dashboard shows this in minutes |
+| `night_interval` | `3600` (1 hr) | Seconds between cards at night. The dashboard shows this in minutes |
 | `day_start` / `day_end` | `7` / `23` | Day mode hours (24h format) |
 | `color_saturation` | `2.5` | Color boost for e-paper (higher = more vivid, max 5.0) |
 | `collection_only` | `false` | Only show cards you've selected in My Cards |
@@ -292,6 +293,8 @@ inkslab-eink-tcg-display/
   requirements.txt               # Python dependencies
   inkslab.service                # systemd service for display
   inkslab_web.service            # systemd service for web dashboard
+  inkslab-selfheal.service       # systemd oneshot for periodic self-heal
+  inkslab-selfheal.timer         # systemd timer — runs self-heal every 24h
   lib/waveshare_epd/             # e-Paper display driver (bundled)
   scripts/
     download_cards_pokemon.py    # Pokemon card downloader
