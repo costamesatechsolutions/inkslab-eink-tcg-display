@@ -1511,6 +1511,12 @@ def api_factory_reset():
             except Exception as e:
                 errors.append(f"Delete {tcg_key}: {e}")
 
+    # Clean up Python cache
+    for root, dirs, files in os.walk(SCRIPT_DIR):
+        for d in dirs:
+            if d == '__pycache__':
+                shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+
     # 3. Reset config and collection to defaults
     for f in [CONFIG_FILE, COLLECTION_FILE]:
         try:

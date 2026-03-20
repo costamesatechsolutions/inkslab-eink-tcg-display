@@ -9,7 +9,7 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Step 1: Install Python dependencies
-echo "[1/4] Installing dependencies..."
+echo "[1/5] Installing dependencies..."
 apt-get install -y python3-pip python3-pil python3-numpy python3-lgpio python3-flask python3-requests >/dev/null 2>&1
 pip3 install --break-system-packages qrcode 2>/dev/null || pip3 install qrcode 2>/dev/null || true
 echo "  Done."
@@ -19,7 +19,7 @@ echo "  Done."
 # /etc/systemd/system/inkslab.service is a symlink to /dev/null.
 # Plain 'cp' follows the symlink and writes to /dev/null.
 # 'rm -f' removes the symlink itself, then 'cp' creates a fresh file.
-echo "[2/4] Installing service files..."
+echo "[2/5] Installing service files..."
 rm -f /etc/systemd/system/inkslab.service
 rm -f /etc/systemd/system/inkslab_web.service
 cp "$SCRIPT_DIR/inkslab.service" /etc/systemd/system/inkslab.service
@@ -27,13 +27,36 @@ cp "$SCRIPT_DIR/inkslab_web.service" /etc/systemd/system/inkslab_web.service
 echo "  Done."
 
 # Step 3: Enable services
-echo "[3/4] Enabling services..."
+echo "[3/5] Enabling services..."
 systemctl daemon-reload
 systemctl enable inkslab inkslab_web
 echo "  Done."
 
-# Step 4: Verify
-echo "[4/4] Verifying..."
+# Step 4: System hardening
+echo "[4/5] Configuring system hardening..."
+
+# Enable hardware watchdog — auto-reboots on kernel freeze
+if ! grep -q "dtparam=watchdog=on" /boot/firmware/config.txt 2>/dev/null; then
+    echo "dtparam=watchdog=on" >> /boot/firmware/config.txt
+fi
+mkdir -p /etc/systemd/system.conf.d
+cat > /etc/systemd/system.conf.d/watchdog.conf << 'WEOF'
+[Manager]
+RuntimeWatchdog=15s
+RebootWatchdogSec=10min
+WEOF
+
+# Cap journal size to prevent SD card fill
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/inkslab.conf << 'JEOF'
+[Journal]
+SystemMaxUse=50M
+JEOF
+
+echo "  Done."
+
+# Step 5: Verify
+echo "[5/5] Verifying..."
 STATUS_INKSLAB=$(systemctl is-enabled inkslab 2>/dev/null || true)
 STATUS_WEB=$(systemctl is-enabled inkslab_web 2>/dev/null || true)
 

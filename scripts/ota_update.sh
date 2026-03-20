@@ -45,6 +45,14 @@ verify_files() {
             return 1
         fi
     done
+    # Import check — catches missing deps, bad imports, module-level errors
+    for f in $CRITICAL_FILES; do
+        module="${f%.py}"
+        if ! python3 -c "import $module" 2>/dev/null; then
+            echo "FAIL: $f fails to import"
+            return 1
+        fi
+    done
     return 0
 }
 
@@ -82,6 +90,9 @@ if [ -z "$BRANCH" ]; then
     fi
 fi
 
+# Save current commit hash for rollback
+PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null)
+
 # Stage 1: Fetch latest from remote
 write_status "fetching" "Checking for updates..." ""
 if ! timeout 60 git fetch origin 2>&1; then
@@ -113,16 +124,18 @@ fi
 write_status "pulling" "Verifying update..." ""
 VERIFY_RESULT=$(verify_files)
 if [ $? -ne 0 ]; then
-    write_status "error" "Update verification failed: $VERIFY_RESULT. Try rebooting." "true"
-    # Try one more time — re-fetch and reset
-    git fetch origin 2>/dev/null
-    git reset --hard "origin/$BRANCH" 2>/dev/null
-    chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
-    if ! verify_files >/dev/null 2>&1; then
-        write_status "error" "Update failed after retry. Re-image the SD card." "true"
-        exit 1
+    write_status "error" "Update failed verification: $VERIFY_RESULT. Rolling back..." "true"
+    # Roll back to previous working commit
+    if [ -n "$PREV_COMMIT" ]; then
+        git reset --hard "$PREV_COMMIT" 2>/dev/null
+        chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
+        echo "Rolled back to $PREV_COMMIT"
     fi
+    exit 1
 fi
+
+# Clean up old git objects to prevent storage growth
+git gc --auto 2>/dev/null
 
 # Stage 2.75: Update service files
 # rm -f first — if masked, the file is a symlink to /dev/null, and cp follows it

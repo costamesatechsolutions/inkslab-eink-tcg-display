@@ -67,12 +67,14 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 
 If you received a pre-flashed InkSlab, setup takes about 30 seconds:
 
-1. **Power on** the InkSlab — wait about 90 seconds for the e-ink display to show setup instructions
+1. **Power on** the InkSlab — wait 1–2 minutes for the e-ink display to show setup instructions
 2. On your phone, go to **Settings > WiFi** and connect to `InkSlab-Setup` (no password needed)
 3. A setup page should appear automatically. If not, open `http://10.42.0.1` in your web browser (Safari, Chrome, etc.) — or scan the QR code on the display
 4. **Pick your home WiFi** from the list, enter the password, and tap Connect
 5. The display will show your new dashboard address (e.g., `http://192.168.1.42`) with a scannable QR code
 6. **Reconnect your phone** to your home WiFi and open that address in your web browser — you're done!
+
+Head to the **Downloads** tab to grab your first card set — cards won't appear on the display until you download at least one.
 
 To change WiFi later, go to **Settings** > **Change WiFi Network** in the dashboard.
 
@@ -176,7 +178,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 1. Go to **Settings** tab
 2. Click **Check for Updates**
 3. If updates are available, click **Update Now**
-4. The page will automatically reconnect after the services restart
+4. Wait about 60 seconds — the display may go blank briefly while services restart. The page will automatically reconnect and cards will resume
 
 ### Via SSH
 ```bash
@@ -296,7 +298,7 @@ inkslab-eink-tcg-display/
     download_cards_mtg.py        # MTG card downloader (Scryfall API)
     download_cards_lorcana.py    # Lorcana card downloader (Lorcast API)
     setup.sh                     # First-time setup (installs services + reboots)
-    ota_update.sh                # OTA update script (git pull + service restart)
+    ota_update.sh                # OTA update script (atomic git reset + verify + service restart)
     selfheal.sh                  # Self-healer: runs before each service start, fixes broken states
 ```
 

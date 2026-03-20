@@ -41,8 +41,23 @@ if [ "$NEEDS_REPAIR" = false ]; then
     done
 fi
 
+# Import check — catches missing deps, bad imports, module-level errors
+if [ "$NEEDS_REPAIR" = false ]; then
+    for f in $CRITICAL_FILES; do
+        module="${f%.py}"
+        if ! python3 -c "import $module" 2>/dev/null; then
+            echo "selfheal: $f fails to import"
+            NEEDS_REPAIR=true
+            break
+        fi
+    done
+fi
+
 if [ "$NEEDS_REPAIR" = true ]; then
     echo "selfheal: Repairing from git..."
+
+    # Save current commit so we can roll back if remote is also broken
+    PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null)
 
     # Try to fetch latest and hard reset
     if timeout 30 git fetch origin 2>/dev/null; then
@@ -59,19 +74,44 @@ if [ "$NEEDS_REPAIR" = true ]; then
         git reset --hard "origin/$BRANCH" 2>/dev/null
         chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
 
-        # Verify repair worked
-        ALL_OK=true
+        # Verify repair worked — files exist, syntax OK, and imports succeed
+        REPAIR_OK=true
         for f in $CRITICAL_FILES; do
             if [ ! -s "$SCRIPT_DIR/$f" ]; then
-                ALL_OK=false
+                REPAIR_OK=false
                 break
             fi
         done
+        if [ "$REPAIR_OK" = true ]; then
+            for f in $CRITICAL_FILES; do
+                if ! python3 -m py_compile "$SCRIPT_DIR/$f" 2>/dev/null; then
+                    REPAIR_OK=false
+                    break
+                fi
+            done
+        fi
+        if [ "$REPAIR_OK" = true ]; then
+            for f in $CRITICAL_FILES; do
+                module="${f%.py}"
+                if ! python3 -c "import $module" 2>/dev/null; then
+                    REPAIR_OK=false
+                    break
+                fi
+            done
+        fi
 
-        if [ "$ALL_OK" = true ]; then
+        if [ "$REPAIR_OK" = true ]; then
             echo "selfheal: Repair successful"
         else
-            echo "selfheal: Repair failed — files still missing after git reset"
+            # Remote is broken too — roll back to previous local commit
+            echo "selfheal: Remote code is broken, rolling back to previous commit"
+            if [ -n "$PREV_COMMIT" ]; then
+                git reset --hard "$PREV_COMMIT" 2>/dev/null
+                chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
+                echo "selfheal: Rolled back to $PREV_COMMIT"
+            else
+                echo "selfheal: Repair failed — no previous commit to roll back to"
+            fi
         fi
     else
         # No internet — try git checkout from local repo
@@ -112,6 +152,38 @@ rm -f /tmp/inkslab_watchdog_setup
 rm -f /tmp/inkslab_update_status.json
 rm -f /tmp/inkslab_status.json
 rm -f /tmp/inkslab_download.log
+
+# Ensure hardware watchdog is enabled
+if [ -f /boot/firmware/config.txt ]; then
+    if ! grep -q "dtparam=watchdog=on" /boot/firmware/config.txt; then
+        echo "dtparam=watchdog=on" >> /boot/firmware/config.txt
+        echo "selfheal: Enabled hardware watchdog (takes effect next reboot)"
+    fi
+fi
+if [ ! -f /etc/systemd/system.conf.d/watchdog.conf ]; then
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/watchdog.conf << 'WEOF'
+[Manager]
+RuntimeWatchdog=15s
+RebootWatchdogSec=10min
+WEOF
+    systemctl daemon-reexec 2>/dev/null
+    echo "selfheal: Configured systemd watchdog"
+fi
+
+# Ensure journal size is capped
+if [ ! -f /etc/systemd/journald.conf.d/inkslab.conf ]; then
+    mkdir -p /etc/systemd/journald.conf.d
+    cat > /etc/systemd/journald.conf.d/inkslab.conf << 'JEOF'
+[Journal]
+SystemMaxUse=50M
+JEOF
+    systemctl restart systemd-journald 2>/dev/null
+    echo "selfheal: Configured journal size limit"
+fi
+
+# Periodic git garbage collection (keeps .git small over years of updates)
+git gc --auto 2>/dev/null
 
 # Clean up orphaned .tmp files from interrupted atomic writes
 find /home/pi/inkslab -name '*.tmp' -mmin +5 -delete 2>/dev/null
