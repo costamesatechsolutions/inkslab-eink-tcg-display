@@ -289,6 +289,8 @@ def connect_to_network(ssid, password):
         # Translate common nmcli error messages into plain English
         if "Secrets were required" in error_msg or "No suitable" in error_msg:
             error_msg = "Wrong password or network not found"
+        elif "psk" in error_msg.lower() or "802-11-wireless-security" in error_msg.lower():
+            error_msg = "Wrong password — check it and try again"
         elif "already exists" in error_msg.lower():
             error_msg = "Could not remove old profile — try again"
         elif "timeout" in error_msg.lower():
