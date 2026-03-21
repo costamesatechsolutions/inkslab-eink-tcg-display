@@ -2,7 +2,7 @@
 
 A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gathering, and Disney Lorcana cards in a graded-slab style layout. Upload your own custom images too. Control everything from your phone — switch between TCGs, download cards, curate your card list by rarity, and more.
 
-**No command line needed.** Pre-flashed units have built-in WiFi setup — just power on, connect to the InkSlab network, and pick your WiFi. Everything else runs through a clean web dashboard — including software updates.
+**No command line needed.** Pre-built units have built-in WiFi setup — just power on, connect to the InkSlab network, and pick your WiFi. Everything else runs through a clean web dashboard — including software updates.
 
 **By [Costa Mesa Tech Solutions](https://github.com/costamesatechsolutions)** (a brand of Pine Heights Ventures LLC)
 
@@ -19,7 +19,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 - **Rarity Filtering:** Select or deselect all cards of a specific rarity (e.g., "Mythic Rare" or "Illustration Rare") across every set with one tap
 - **Smart Shuffle:** Remembers recently shown cards and pushes them to the back of the deck upon reshuffling so you always see fresh art
 - **Custom Images:** Upload your own images and organize them into sets with optional metadata
-- **WiFi Setup Mode:** Pre-flashed units automatically create an "InkSlab-Setup" WiFi network on first boot. Connect with your phone, pick your home WiFi, and you're done — no SSH needed
+- **WiFi Setup Mode:** Automatically creates an "InkSlab-Setup" WiFi network on first boot. Connect with your phone, pick your home WiFi, and you're done — no SSH needed
 - **OTA Updates:** Update InkSlab software directly from the web dashboard — no SSH needed
 - **Startup Splash:** On boot, the display shows your Pi's IP address so you know exactly where to connect — no SSH or router lookup needed
 - **WiFi Auto-Recovery:** If your WiFi goes down for 30+ minutes (router swap, password change, etc.), InkSlab automatically creates the setup hotspot so you can reconfigure. If your old WiFi comes back, it reconnects on its own — no action needed
@@ -58,15 +58,22 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 | **90-degree micro USB cable** | Optional but recommended — keeps the power cable hidden behind the frame |
 | **3D printed frame** | Print files on MakerWorld: **[InkSlab on MakerWorld](https://makerworld.com/en/models/2452200-inkslab-open-source-e-ink-tcg-display)** |
 
-**Assembly:** Attach the e-Paper HAT to the Pi's GPIO header, mount in the frame, route the USB cable out the back, and follow the software setup below.
+### Physical Assembly
+
+1. **Prep the Screen:** Leave the e-ink screen resting face-down in its protective foam. Screw two of the included brass standoffs into the two mounting holes on the back of the screen that align with a Raspberry Pi Zero.
+2. **Mount the Pi:** Align the Raspberry Pi's GPIO header with the screen's pins and press them firmly together. Use the included short screws to secure the Pi to the two brass standoffs you just installed.
+3. **Insert the Brains:** Slide your MicroSD card (flashed with Raspberry Pi OS) into the Pi's card slot.
+4. **The Peel:** Flip the assembly over. Grab the red pull-tab and peel the protective plastic film off the front of the e-ink display. (Doing this after handling the circuit boards prevents finger smudges on the glass.)
+5. **Slide It In:** Hold the 3D-printed case horizontally. Gently slide the assembled Pi and screen into the top opening. Sliding it in horizontally instead of dropping it vertically protects the glass screen from impact. Push it all the way down until the Pi's micro-USB port perfectly aligns with the cutout on the side of the frame.
+6. **Close and Power:** Snap the 3D-printed back lid onto the case to lock everything in. Route your micro-USB cable through the opening, plug it in, and proceed to the software setup steps below.
 
 ---
 
 ## Setup
 
-### Pre-Flashed Units (Easiest)
+### Pre-Built Units (Purchased from Costa Mesa Tech Solutions)
 
-If you received a pre-flashed InkSlab, setup takes about 30 seconds:
+Pre-built units are fully assembled and ready to go — just plug in and connect to WiFi:
 
 > **Important:** The e-ink screen will look completely blank or frozen while the Pi boots — **this is normal.** It takes **up to 2–3 minutes** for the first screen to appear. Don't unplug it — just wait.
 
@@ -241,7 +248,7 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 
 > **Timezone tip:** The Settings tab shows the Pi's current time and an Auto-Detect button. Tap it once to set your timezone from your phone — it detects your full timezone (e.g., "America/New_York") and handles daylight saving automatically. You never need to touch it again, even when clocks change.
 >
-> **Pre-flashed units:** The Pi's timezone is set when the SD card is flashed. If the recipient is in a different timezone, they just need to go to Settings and tap Auto-Detect — it takes 2 seconds and they'll never need to think about it again.
+> **Pre-built units:** The Pi's timezone is set when the SD card is flashed. If the recipient is in a different timezone, they just need to go to Settings and tap Auto-Detect — it takes 2 seconds and they'll never need to think about it again.
 
 ---
 
