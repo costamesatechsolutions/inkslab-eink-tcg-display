@@ -268,7 +268,15 @@ def show_splash_screen(epd, config):
         url_text = f"http://{ip}"
         draw.text((cx, 130), "Scan or open in your", fill=(0, 0, 0), font=font_body, anchor="mm")
         draw.text((cx, 160), "web browser:", fill=(0, 0, 0), font=font_body, anchor="mm")
-        draw.text((cx, 205), url_text, fill=(0, 0, 255), font=font_url, anchor="mm")
+        # Shrink URL font if it would clip the display edges
+        url_font = font_url
+        url_w = draw.textbbox((0, 0), url_text, font=url_font)[2]
+        if url_w > DISPLAY_WIDTH - 20:
+            try:
+                url_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            except Exception:
+                pass
+        draw.text((cx, 205), url_text, fill=(0, 0, 255), font=url_font, anchor="mm")
 
         # QR code
         qr_img = make_qr(url_text)
@@ -510,7 +518,14 @@ def show_no_cards_screen(epd, config, ip=None):
 
         if ip:
             url_text = f"http://{ip}"
-            draw.text((cx, 235), url_text, fill=(0, 0, 255), font=font_url, anchor="mm")
+            url_font = font_url
+            url_w = draw.textbbox((0, 0), url_text, font=url_font)[2]
+            if url_w > DISPLAY_WIDTH - 20:
+                try:
+                    url_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+                except Exception:
+                    pass
+            draw.text((cx, 235), url_text, fill=(0, 0, 255), font=url_font, anchor="mm")
             # QR code
             qr_img = make_qr(url_text)
             if qr_img:
@@ -638,15 +653,19 @@ def get_card_metadata(img_path, master_index):
 
         json_path = os.path.join(folder_path, "_data.json")
         if os.path.exists(json_path):
-            with open(json_path, "r") as f:
-                data = json.load(f)
-                if card_id in data:
-                    entry = data[card_id]
-                    num = entry.get("number", "00")
+            try:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Corrupt _data.json at {json_path}: {e}")
+                data = {}
+            if card_id in data:
+                entry = data[card_id]
+                num = entry.get("number", "00")
 
-                    if entry.get("rarity"):
-                        extra = entry["rarity"].upper()
-                        extra = extra.replace("RARE HOLO", "HOLO").replace("DOUBLE RARE", "DBL RARE")
+                if entry.get("rarity"):
+                    extra = entry["rarity"].upper()
+                    extra = extra.replace("RARE HOLO", "HOLO").replace("DOUBLE RARE", "DBL RARE")
         else:
             # Auto-generate metadata from filename (for custom images)
             name = card_id.replace('_', ' ').replace('-', ' ').title()
