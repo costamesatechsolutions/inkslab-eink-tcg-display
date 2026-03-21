@@ -132,8 +132,8 @@ def load_collection(tcg):
             with open(COLLECTION_FILE, 'r') as f:
                 data = json.load(f)
             return set(data.get(tcg, []))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error reading collection file: {e}")
     return set()
 
 
