@@ -54,6 +54,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 | **Raspberry Pi Zero W H** | The "H" means headers are pre-soldered (required for the display HAT) |
 | **[Waveshare 4" e-Paper HAT+ (E)](https://www.waveshare.com/wiki/4inch_e-Paper_HAT%2B_(E)_Manual)** | Spectra 6 — the 7-color model |
 | **Micro SD card** | 32 GB for one TCG, 64 GB+ for all three (Pokemon ~13 GB, MTG ~13 GB, Lorcana ~2 GB) |
+| **USB power adapter** | Any standard 5V micro USB phone charger works (5V/2A+ recommended for stable operation) |
 | **90-degree micro USB cable** | Optional but recommended — keeps the power cable hidden behind the frame |
 | **3D printed frame** | Print files on MakerWorld: **[InkSlab on MakerWorld](https://makerworld.com/en/models/2452200-inkslab-open-source-e-ink-tcg-display)** |
 
@@ -67,7 +68,9 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 
 If you received a pre-flashed InkSlab, setup takes about 30 seconds:
 
-1. **Power on** the InkSlab — wait 1–2 minutes for the e-ink display to show setup instructions
+> **Important:** The e-ink screen will look completely blank or frozen while the Pi boots — **this is normal.** It takes **up to 2–3 minutes** for the first screen to appear. Don't unplug it — just wait.
+
+1. **Power on** the InkSlab — wait up to 2–3 minutes for the e-ink display to show setup instructions
 2. On your phone, go to **Settings > WiFi** and connect to `InkSlab-Setup` (no password needed)
 3. A setup page should appear automatically. If not, open `http://10.42.0.1` in your web browser (Safari, Chrome, etc.) — or scan the QR code on the display
 4. **Pick your home WiFi** from the list, enter the password, and tap Connect
@@ -82,7 +85,7 @@ To change WiFi later, go to **Settings** > **Change WiFi Network** in the dashbo
 
 ### DIY Setup (Flash Your Own SD Card)
 
-### Step 1 — Flash the SD Card
+#### Step 1 — Flash the SD Card
 
 1. Download [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
 2. Choose **Raspberry Pi Zero** > **Raspberry Pi OS (Legacy, 32-bit) Lite** — this is the Bookworm-based version with no desktop environment
@@ -90,9 +93,9 @@ To change WiFi later, go to **Settings** > **Change WiFi Network** in the dashbo
    - Set hostname to `inkslab`, username to `pi`, pick a password
    - Enter your Wi-Fi name and password
    - Under **Services**, enable SSH
-4. Flash, insert the SD card, power on the Pi, and wait ~2 minutes
+4. Flash, insert the SD card, power on the Pi, and wait 2–3 minutes
 
-### Step 2 — SSH In and Install
+#### Step 2 — SSH In and Install
 
 SSH into your Pi from any terminal (find the IP from your router's admin page):
 
@@ -117,7 +120,7 @@ sudo apt-get update -qq && sudo apt-get install -y git
 git clone https://github.com/costamesatechsolutions/inkslab-eink-tcg-display.git ~/inkslab
 ```
 
-### Step 3 — Run Setup
+#### Step 3 — Run Setup
 
 ```bash
 sudo bash ~/inkslab/scripts/setup.sh
@@ -129,7 +132,7 @@ After reboot, InkSlab will either:
 - **Show the WiFi setup screen** if no WiFi is saved — connect your phone to the `InkSlab-Setup` network and follow the on-screen instructions
 - **Show a splash screen with your dashboard URL** (e.g., `http://192.168.1.42`) if WiFi is already configured
 
-The Pi Zero W takes **1–2 minutes** to fully boot and display the first screen. Be patient — the e-ink display won't update until the services are ready.
+The Pi Zero W takes **2–3 minutes** to fully boot and display the first screen. The e-ink screen will look blank or frozen during this time — **this is normal.** Don't unplug it, just wait.
 
 > **Tip:** If buttons or controls on the dashboard ever stop responding, first **close any extra tabs** — having multiple dashboard tabs open is the most common cause. Then try opening a fresh tab or using Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) to force-clear the cache. On mobile, try private/incognito mode.
 
@@ -176,7 +179,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 1. Go to **Settings** tab
 2. Click **Check for Updates**
 3. If updates are available, click **Update Now**
-4. Wait about 60 seconds — the display may go blank briefly while services restart. The page will automatically reconnect and cards will resume
+4. Wait 1–2 minutes — the display may go blank while services restart. The page will automatically reconnect and cards will resume
 
 ### Via SSH
 ```bash
@@ -244,18 +247,18 @@ All settings are managed from the web dashboard. They're stored in `/home/pi/ink
 
 ## Troubleshooting
 
-> **The fix for almost everything: unplug the InkSlab, wait 10 seconds, plug it back in.** Wait 2 minutes for it to fully boot. This clears any stuck state and triggers automatic self-repair. If something seems wrong, always try this first before anything else.
+> **The fix for almost everything: unplug the InkSlab, wait 10 seconds, plug it back in.** Wait 2–3 minutes for it to fully boot — the screen will look blank or frozen during this time, which is normal. This clears any stuck state and triggers automatic self-repair. If something seems wrong, always try this first before anything else.
 
 ### Common Issues (no SSH needed)
 
 | Problem | Fix |
 |---------|-----|
-| Something seems wrong / nothing is working | **Unplug, wait 10 seconds, plug back in.** Wait 2 minutes. InkSlab self-heals on every boot. |
-| Display is frozen / not changing cards | Unplug, wait 10 seconds, plug back in. Wait 2 minutes for first card to appear. |
+| Something seems wrong / nothing is working | **Unplug, wait 10 seconds, plug back in.** Wait 2–3 minutes. InkSlab self-heals on every boot. |
+| Display is frozen / not changing cards | Unplug, wait 10 seconds, plug back in. Wait 2–3 minutes for first card to appear. |
 | Can't find the dashboard | The IP address is shown on the e-ink display at boot. If you missed it, unplug and replug — it shows the IP again on startup. Or check your router's admin page for a device named `inkslab`. |
 | Dashboard not loading in browser | Make sure your phone/computer is on the same WiFi as the InkSlab. Try typing the IP address directly (e.g. `http://192.168.1.42`). If still nothing, unplug and replug the InkSlab. |
 | Buttons not responding | **First: close any extra tabs** — having multiple dashboard tabs open is the most common cause. Open a single fresh tab and navigate to the dashboard address. Or try Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac). On mobile, open a new tab or use private/incognito. |
-| Dashboard broken after a large update | Close all dashboard tabs. Open a single fresh tab and go to the dashboard. If still broken, unplug and replug the InkSlab, then open a fresh tab. |
+| Dashboard broken after a large update | Close all dashboard tabs. Open a single fresh tab and go to the dashboard. If still broken, unplug and replug the InkSlab, wait 2–3 minutes, then open a fresh tab. |
 | Washed-out or dull colors | Go to **Settings** and increase **Color Saturation** (default 2.5, try 3.0–4.0). Tap Save Settings. |
 | Day/night timing is off | Go to **Settings** and tap **Auto-Detect** next to Timezone. Then tap **Save Settings**. |
 | My Cards mode shows nothing | Go to the **My Cards** tab and select some cards first. |
@@ -277,7 +280,7 @@ These are rare situations that require SSH access. If you don't have SSH set up,
 | Display not updating after 5+ minutes | Check SPI is enabled: `ls /dev/spi*` — should show files. If missing, run `sudo raspi-config nonint do_spi 0 && sudo reboot`. |
 | Check service logs | `journalctl -u inkslab -f` (display) or `journalctl -u inkslab_web -f` (dashboard) |
 | Manually restart services | `sudo systemctl restart inkslab inkslab_web` |
-| SSH disconnected after setup | Normal — the Pi reboots as part of setup. Wait 2 minutes and reconnect. |
+| SSH disconnected after setup | Normal — the Pi reboots as part of setup. Wait 2–3 minutes and reconnect. |
 
 ---
 
@@ -314,6 +317,12 @@ inkslab-eink-tcg-display/
 
 AGPL-3.0 — see [LICENSE](LICENSE)
 
+
+## Disclaimer
+
+InkSlab is an independent open-source hardware project by Pine Heights Ventures LLC. It is not produced by, affiliated with, or endorsed by Nintendo, The Pokemon Company, Wizards of the Coast, Hasbro, Disney, Ravensburger, or any trading card game publisher. All card names, artwork, and trademarks are property of their respective owners. InkSlab does not distribute card artwork — images are downloaded directly from publicly available APIs at the user's request.
+
+---
 
 ## Star History
 
