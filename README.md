@@ -60,7 +60,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 
 ### Physical Assembly
 
-1. **Prep the Screen:** Leave the e-ink screen resting face-down in its protective foam. Screw two of the included brass standoffs into the two mounting holes on the back of the screen that align with a Raspberry Pi Zero.
+1. **Prep the Screen:** Leave the e-ink screen resting face-down in its protective foam. Find the two inner mounting holes on each side of the HAT connector — these are the only two that align with a Raspberry Pi Zero. Peel off the small orange stickers covering those two holes, then screw in two of the included brass standoffs.
 2. **Mount the Pi:** Align the Raspberry Pi's GPIO header with the screen's pins and press them firmly together. Use the included short screws to secure the Pi to the two brass standoffs you just installed.
 3. **Insert the Brains:** Slide your MicroSD card (flashed with Raspberry Pi OS) into the Pi's card slot.
 4. **The Peel:** Flip the assembly over. Grab the red pull-tab and peel the protective plastic film off the front of the e-ink display. (Doing this after handling the circuit boards prevents finger smudges on the glass.)
