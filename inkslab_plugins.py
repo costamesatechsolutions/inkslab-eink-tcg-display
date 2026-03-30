@@ -288,6 +288,55 @@ def get_plugin_payload() -> Dict[str, Dict[str, object]]:
     return {plugin_id: plugin.to_dict() for plugin_id, plugin in get_plugins().items()}
 
 
+def default_plugin_settings() -> Dict[str, Dict[str, object]]:
+    """Return default per-plugin settings seeded from plugin config schema."""
+    defaults: Dict[str, Dict[str, object]] = {}
+    for plugin_id, plugin in get_plugins().items():
+        schema = plugin.config_schema or []
+        if not schema:
+            continue
+        plugin_defaults: Dict[str, object] = {}
+        for field in schema:
+            key = str(field.get("key") or "").strip()
+            if not key:
+                continue
+            if "default" in field:
+                plugin_defaults[key] = field.get("default")
+            elif field.get("type") == "number":
+                plugin_defaults[key] = 10
+            else:
+                plugin_defaults[key] = ""
+        defaults[plugin_id] = plugin_defaults
+    return defaults
+
+
+def normalize_plugin_settings(plugin_settings) -> Dict[str, Dict[str, object]]:
+    """Normalize stored per-plugin settings against the declared config schema."""
+    normalized = default_plugin_settings()
+    raw = plugin_settings if isinstance(plugin_settings, dict) else {}
+    plugins = get_plugins()
+    for plugin_id, plugin in plugins.items():
+        schema = plugin.config_schema or []
+        source = raw.get(plugin_id)
+        if not isinstance(source, dict):
+            continue
+        bucket = normalized.setdefault(plugin_id, {})
+        for field in schema:
+            key = str(field.get("key") or "").strip()
+            if not key or key not in source:
+                continue
+            value = source.get(key)
+            field_type = str(field.get("type") or "text")
+            if field_type == "number":
+                try:
+                    bucket[key] = max(1, min(1440, int(value)))
+                except (TypeError, ValueError):
+                    continue
+            else:
+                bucket[key] = str(value).strip()[:240]
+    return normalized
+
+
 def get_card_libraries() -> Dict[str, str]:
     """Return plugin -> card library path for TCG-backed plugins."""
     return {

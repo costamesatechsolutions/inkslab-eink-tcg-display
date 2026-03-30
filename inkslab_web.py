@@ -536,6 +536,7 @@ def api_plugins():
     return jsonify({
         "active_plugin": config["active_plugin"],
         "enabled_plugins": config["enabled_plugins"],
+        "plugin_settings": config.get("plugin_settings", {}),
         "display_mode": config["display_mode"],
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
@@ -550,9 +551,12 @@ def api_set_plugin_config():
     if not isinstance(body, dict):
         return jsonify({"error": "invalid request"}), 400
     enabled_plugins = normalize_enabled_plugins(body.get('enabled_plugins'))
+    plugin_settings = body.get('plugin_settings')
     with _config_lock:
         config = load_config()
         config['enabled_plugins'] = enabled_plugins
+        if isinstance(plugin_settings, dict):
+            config['plugin_settings'] = plugin_settings
         config = normalize_display_config(config)
         save_config(config)
     try:
@@ -563,6 +567,7 @@ def api_set_plugin_config():
     return jsonify({
         "ok": True,
         "enabled_plugins": config["enabled_plugins"],
+        "plugin_settings": config.get("plugin_settings", {}),
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
         "active_plugin": config["active_plugin"],
@@ -2421,6 +2426,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .plugin-toggle { display: flex; align-items: center; gap: 6px; color: #D8E6E4; font-size: 12px; }
 .plugin-note { font-size: 11px; color: #8899a6; margin-top: 6px; }
+.plugin-settings { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; display: flex; flex-direction: column; gap: 8px; }
+.plugin-settings-row label { display: block; color: #6BCCBD; font-size: 11px; margin-bottom: 4px; }
+.plugin-settings-row input, .plugin-settings-row select { width: 100%; }
 .context-note { font-size: 12px; color: #6BCCBD; margin: 6px 0 10px; line-height: 1.45; }
 .subtle-note { font-size: 11px; color: #8899a6; margin-top: 6px; line-height: 1.4; }
 .schedule-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
@@ -3151,6 +3159,7 @@ function loadPlugins() {
     if (!summaryEl || !listEl) return;
     var plugins = d.plugins || {};
     var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
+    var pluginSettings = d.plugin_settings || {};
     var active = d.active_plugin || '';
     var entries = Object.entries(plugins);
     summaryEl.textContent = enabledPlugins.length + ' runnable plugin' + (enabledPlugins.length === 1 ? '' : 's') + ' enabled. Active: ' + active;
@@ -3172,6 +3181,33 @@ function loadPlugins() {
       var note = isRuntime
         ? 'This plugin can be enabled for rotation right now.'
         : 'This plugin is part of the modular roadmap and is not runnable yet.';
+      var settingsHtml = '';
+      if (plugin.config_schema && plugin.config_schema.length) {
+        settingsHtml = '<div class="plugin-settings">' + plugin.config_schema.map(function(field) {
+          var fieldKey = field.key || '';
+          var fieldId = id + '__' + fieldKey;
+          var pluginBucket = pluginSettings[id] || {};
+          var fieldValue = pluginBucket[fieldKey] != null ? pluginBucket[fieldKey] : (field.default != null ? field.default : '');
+          var inputHtml = '';
+          if (field.type === 'select') {
+            var options = Array.isArray(field.options) ? field.options : [
+              {value:'imperial', label:'Imperial'},
+              {value:'metric', label:'Metric'}
+            ];
+            inputHtml = '<select data-plugin-setting="' + id + '" data-setting-key="' + esc(fieldKey) + '" id="' + esc(fieldId) + '">' +
+              options.map(function(opt) {
+                var value = (opt && opt.value != null) ? String(opt.value) : '';
+                var label = (opt && opt.label != null) ? String(opt.label) : value;
+                return '<option value="' + esc(value) + '"' + (String(fieldValue) === value ? ' selected' : '') + '>' + esc(label) + '</option>';
+              }).join('') +
+            '</select>';
+          } else {
+            var inputType = field.type === 'number' ? 'number' : 'text';
+            inputHtml = '<input type="' + inputType + '" data-plugin-setting="' + id + '" data-setting-key="' + esc(fieldKey) + '" id="' + esc(fieldId) + '" value="' + esc(fieldValue) + '">';
+          }
+          return '<div class="plugin-settings-row"><label for="' + esc(fieldId) + '">' + esc(field.label || fieldKey) + '</label>' + inputHtml + '</div>';
+        }).join('') + '</div>';
+      }
       return '<div class="plugin-item' + (id === active ? ' active' : '') + '">' +
         '<div class="plugin-top"><div class="plugin-name">' + esc(plugin.name || id) + '</div>' + badge + '</div>' +
         '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
@@ -3181,6 +3217,7 @@ function loadPlugins() {
             ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Enable in display plan</label>'
             : '<div class="plugin-note">Will appear here as a real module once its renderer and data source are built.</div>') +
         '</div>' +
+        settingsHtml +
         (isRuntime ? '<div class="plugin-note">' + esc(note) + '</div>' : '') +
       '</div>';
     }).join('');
@@ -3229,11 +3266,26 @@ function collectEnabledPlugins() {
   });
 }
 
+function collectPluginSettings() {
+  var out = {};
+  Array.from(document.querySelectorAll('[data-plugin-setting]')).forEach(function(el) {
+    var pluginId = el.getAttribute('data-plugin-setting');
+    var key = el.getAttribute('data-setting-key');
+    if (!pluginId || !key) return;
+    if (!out[pluginId]) out[pluginId] = {};
+    out[pluginId][key] = el.value;
+  });
+  return out;
+}
+
 function savePluginConfig() {
   fetch(API + '/api/plugins/config', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({enabled_plugins: collectEnabledPlugins()})
+    body: JSON.stringify({
+      enabled_plugins: collectEnabledPlugins(),
+      plugin_settings: collectPluginSettings()
+    })
   }).then(r => r.json()).then(function(d) {
     if (d && d.ok) {
       showToast('Plugin selection saved');

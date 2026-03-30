@@ -8,7 +8,13 @@ import os
 import tempfile
 
 from inkslab_paths import COLLECTION_FILE, CONFIG_FILE, STATUS_FILE
-from inkslab_plugins import default_enabled_plugins, default_display_schedule, normalize_display_config
+from inkslab_plugins import (
+    default_enabled_plugins,
+    default_display_schedule,
+    default_plugin_settings,
+    normalize_display_config,
+    normalize_plugin_settings,
+)
 from inkslab_update_helpers import normalize_update_branch
 
 
@@ -29,6 +35,7 @@ WEB_DEFAULTS = {
     "timezone_offset": None,
     "timezone_name": None,
     "update_branch": None,
+    "plugin_settings": default_plugin_settings(),
 }
 
 
@@ -58,6 +65,7 @@ def load_config(script_dir: str):
         except Exception:
             pass
     config = normalize_display_config(config)
+    config["plugin_settings"] = normalize_plugin_settings(config.get("plugin_settings"))
     config["update_branch"] = normalize_update_branch(script_dir, config.get("update_branch"))
     return config
 

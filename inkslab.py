@@ -57,6 +57,7 @@ DEFAULTS = {
     "slab_header_mode": "normal",
     "timezone_offset": None,
     "timezone_name": None,
+    "plugin_settings": {},
 }
 
 TCG_LIBRARIES = get_card_libraries()
