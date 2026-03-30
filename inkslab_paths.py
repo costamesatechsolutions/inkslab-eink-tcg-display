@@ -20,6 +20,7 @@ UPDATE_STATUS_FILE = os.path.join(RUNTIME_DIR, "inkslab_update_status.json")
 UPDATE_LOCK_FILE = os.path.join(RUNTIME_DIR, "inkslab_update.lock")
 WEATHER_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_weather_cache.json")
 NEWS_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_news_cache.json")
+CALENDAR_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_calendar_cache.json")
 CURRENT_PREVIEW_FILE = os.path.join(RUNTIME_DIR, "inkslab_current_preview.png")
 
 NEXT_TRIGGER = os.path.join(RUNTIME_DIR, "inkslab_next")
