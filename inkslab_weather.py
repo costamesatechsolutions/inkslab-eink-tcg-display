@@ -111,7 +111,7 @@ def fetch_weather_snapshot(config):
     if not location_name:
         return {
             "ok": False,
-            "reason": "Set a location in Dashboard > Plugins > Weather.",
+            "reason": "Set a location in Setup > Plugins > Weather.",
             "location_label": "Weather needs a location",
             "updated_at": int(time.time()),
         }

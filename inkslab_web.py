@@ -2482,9 +2482,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 
 <div class="tabs">
   <div class="tab active" id="tab-btn-display" data-tab="display" onclick="showTab('display')">Display</div>
-  <div class="tab" id="tab-btn-settings" data-tab="settings" onclick="showTab('settings')">Dashboard</div>
+  <div class="tab" id="tab-btn-settings" data-tab="settings" onclick="showTab('settings')">Setup</div>
   <div class="tab" id="tab-btn-collection" data-tab="collection" onclick="showTab('collection')">Library</div>
-  <div class="tab" id="tab-btn-downloads" data-tab="downloads" onclick="showTab('downloads')">Data</div>
+  <div class="tab" id="tab-btn-downloads" data-tab="downloads" onclick="showTab('downloads')">Sources</div>
 </div>
 
 <div class="content">
@@ -2503,9 +2503,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <div style="margin-top:12px">
       <div class="stat"><span class="stat-label">Card</span><span class="stat-value" id="st-card">&mdash;</span></div>
       <div class="stat"><span class="stat-label">Set</span><span class="stat-value" id="st-set">&mdash;</span></div>
-      <div class="stat"><span class="stat-label">Rarity</span><span class="stat-value" id="st-rarity">&mdash;</span></div>
-      <div class="stat"><span class="stat-label">TCG</span><span class="stat-value" id="st-tcg">&mdash;</span></div>
-      <div class="stat"><span class="stat-label">Cards in Deck</span><span class="stat-value" id="st-total">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">Detail</span><span class="stat-value" id="st-rarity">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">Plugin</span><span class="stat-value" id="st-tcg">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">Items in Rotation</span><span class="stat-value" id="st-total">&mdash;</span></div>
       <div class="stat" id="st-error-row" style="display:none"><span class="stat-label" style="color:#ff6b6b">Status</span><span class="stat-value" style="color:#ff6b6b;font-size:12px" id="st-error"></span></div>
     </div>
   </div>
@@ -2529,7 +2529,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <h3>Display Mode</h3>
     <p id="display-mode-note" class="context-note">Loading display behavior...</p>
     <div id="quick-switch-card" style="display:none">
-      <p class="subtle-note">Manual TCG switching is useful for testing, but your saved display plan is the normal source of truth.</p>
+      <p class="subtle-note">Manual card-plugin switching is mainly for testing. Your saved display plan is the normal source of truth.</p>
       <div class="flex-row" id="quick-switch-btns"></div>
     </div>
   </div>
@@ -2545,17 +2545,17 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 
   <div class="settings-section active" id="settings-section-overview">
     <div class="card section-intro">
-      <h3>Dashboard Overview</h3>
-      <p class="context-note">This section controls the overall display behavior: how the screen rotates, which plugin is the default fallback, and the shared timing and appearance settings for the device.</p>
-      <div class="pill-note">Start here for most setup changes</div>
+      <h3>Display Setup</h3>
+      <p class="context-note">This section controls the overall behavior of the slab: how it rotates content, which plugin is the default fallback, and the shared timing and appearance settings for the device.</p>
+      <div class="pill-note">Start here for normal setup</div>
     </div>
     <div class="card">
-      <h3>Core Display</h3>
-      <p class="context-note">These are the shared device settings that apply to the whole dashboard, no matter which plugins you enable.</p>
+      <h3>Appearance & Timing</h3>
+      <p class="context-note">These shared settings apply across the whole device, no matter which plugins you enable.</p>
       <div class="form-group" id="default-tcg-group">
-        <label>Default TCG Plugin</label>
+        <label>Default Card Plugin</label>
         <select id="cfg-tcg"></select>
-        <div class="subtle-note">Legacy compatibility control for the current card renderer. If you only use weather, traffic, or other ambient plugins later, you can ignore this.</div>
+        <div class="subtle-note">Only used when card-style plugins are enabled. You can ignore this on weather-only or dashboard-only builds.</div>
       </div>
       <div class="form-group">
         <label>Slab Header</label>
@@ -2605,9 +2605,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div class="form-group">
         <div class="toggle">
           <input type="checkbox" id="cfg-collection">
-          <label for="cfg-collection">TCG-only: show only My Cards</label>
+          <label for="cfg-collection">Only show saved card selections</label>
         </div>
-        <div class="subtle-note">Only affects card plugins. Ambient plugins like weather or traffic ignore this.</div>
+        <div class="subtle-note">This only affects card plugins. Weather, news, traffic, and other ambient plugins ignore it.</div>
       </div>
       <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
     </div>
@@ -2702,17 +2702,17 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- COLLECTION TAB -->
 <div id="tab-collection" class="panel">
   <div class="card">
-    <h3>Plugin Library Tools</h3>
-    <p class="context-note">This area is only for card-library plugins today. If your device only runs weather, traffic, news, or other ambient modules, you can ignore this whole tab.</p>
-    <div class="pill-note">TCG-specific tools</div>
+    <h3>Local Library</h3>
+    <p class="context-note">This tab manages the local content library the slab can rotate through. Right now that mainly means trading cards and custom image folders.</p>
+    <div class="pill-note">Local content selection</div>
   </div>
   <div class="card">
-    <h3>My Cards</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like — favorites, a themed set, a wish list, or cards you collect. Enable "My Cards mode" in Settings to only show these.</p>
+    <h3>Saved Card Picks</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like: favorites, a themed set, a wish list, or cards you collect. Turn on “Only show saved card selections” in Setup if you want the slab to only rotate these.</p>
     <button class="btn btn-secondary btn-sm" onclick="clearCollection()">Clear All</button>
   </div>
   <div class="card">
-    <h3>Search Cards</h3>
+    <h3>Search Library</h3>
     <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Find a card by name and add all versions to your list.</p>
     <div id="search-filters" class="search-filters" style="display:none"></div>
     <div class="search-wrap">
@@ -2737,16 +2737,16 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- DOWNLOADS TAB -->
 <div id="tab-downloads" class="panel">
   <div class="card">
-    <h3>Data & Imports</h3>
-    <p class="context-note">This tab currently manages card downloads and custom image sets. As plugins mature, this will become the home for plugin data sources and imports more broadly.</p>
-    <div class="pill-note">Currently focused on TCG and image plugins</div>
+    <h3>Sources & Imports</h3>
+    <p class="context-note">This is where content gets added, refreshed, or removed. Right now it focuses on card downloads and custom image folders, and later it will grow into the home for plugin data sources more broadly.</p>
+    <div class="pill-note">Downloads, imports, and source cleanup</div>
   </div>
   <div class="card">
     <h3>Storage</h3>
     <div id="storage-info"></div>
   </div>
   <div class="card">
-    <h3>Download Cards</h3>
+    <h3>Card Downloads</h3>
     <div id="dl-buttons"></div>
     <div id="dl-mtg-since" style="display:none;margin-top:8px" class="form-group">
       <label>Download MTG since year:</label>
@@ -2764,7 +2764,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   </div>
   <div class="card">
     <h3>Custom Images</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Upload your own images. Each folder is a set.</p>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Upload your own images. Each folder becomes a local image set the slab can rotate through.</p>
     <div class="flex-row" style="margin-bottom:8px">
       <input type="text" id="custom-folder-name" placeholder="New folder name..." style="flex:2;background:#1F333F;color:#D8E6E4;border:1px solid #36A5CA44;border-radius:4px;padding:8px;font-size:14px">
       <button class="btn btn-primary" onclick="createCustomFolder()" style="flex:1">Create</button>
@@ -2773,10 +2773,10 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card">
-    <h3>Delete Data</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Choose one data source to clear. This scales better as InkSlab gains more plugins and libraries.</p>
+    <h3>Remove Source Data</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Choose one content source to clear. This stays cleaner as InkSlab grows beyond cards into more plugins and data types.</p>
     <div class="form-group" style="margin-bottom:8px">
-      <label>Data Source</label>
+      <label>Source</label>
       <select id="delete-source"></select>
     </div>
     <button class="btn btn-danger btn-block" id="delete-source-btn" onclick="deleteSelectedData()">Delete Selected Data</button>
