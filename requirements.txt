@@ -8,4 +8,3 @@ spidev
 gpiozero
 flask
 qrcode
-yfinance

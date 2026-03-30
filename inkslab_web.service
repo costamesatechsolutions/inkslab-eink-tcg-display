@@ -2,6 +2,8 @@
 Description=InkSlab Web Dashboard
 After=network-online.target NetworkManager.service inkslab.service
 Wants=network-online.target NetworkManager.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -11,8 +13,6 @@ WorkingDirectory=/home/pi/inkslab
 Restart=on-failure
 RestartSec=10
 # Crash loop guard: give up after 5 failures in 10 minutes.
-StartLimitIntervalSec=600
-StartLimitBurst=5
 TimeoutStopSec=20
 StandardOutput=journal
 StandardError=journal

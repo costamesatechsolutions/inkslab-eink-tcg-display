@@ -2,6 +2,8 @@
 Description=InkSlab - e-Ink TCG Card Display
 After=network-online.target NetworkManager.service
 Wants=network-online.target NetworkManager.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -13,8 +15,6 @@ Restart=on-failure
 RestartSec=30
 # Crash loop guard: give up after 5 failures in 10 minutes.
 # selfheal.sh will repair on the next manual reboot.
-StartLimitIntervalSec=600
-StartLimitBurst=5
 # Display sleep takes up to ~30s; give the finally-block time to finish.
 TimeoutStopSec=60
 StandardOutput=journal

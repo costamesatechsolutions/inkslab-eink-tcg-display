@@ -2,14 +2,17 @@
 """
 Market Snapshot helpers for InkSlab.
 
-Demo mode works without setup. Optional live quotes can use yfinance.
+Demo mode works without setup. Live quotes use Yahoo Finance's public quote
+endpoint so OTA installs do not depend on extra Python packages.
 """
 
 import json
 import os
 import time
+from urllib.parse import quote
 
 from PIL import Image, ImageDraw, ImageFont
+import requests
 
 from inkslab_paths import MARKET_CACHE_FILE
 
@@ -115,42 +118,49 @@ def _demo_snapshot(settings):
         "mode": "demo",
         "provider": "Sample Data",
         "quotes": quotes,
-        "reason": "Demo values are showing. Turn demo mode off to use free Yahoo Finance quotes.",
+        "reason": "Demo values are showing. Turn demo mode off to use live Yahoo Finance quotes.",
         "updated_at": int(time.time()),
     }
 
 
 def _live_snapshot(settings):
+    symbols = settings["market_symbols"]
+    if not symbols:
+        return None, "No market symbols are configured."
+
     try:
-        import yfinance as yf
+        url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" + quote(",".join(symbols))
+        response = requests.get(url, timeout=12)
+        response.raise_for_status()
+        payload = response.json()
     except Exception:
-        return None, "yfinance is not installed yet."
+        return None, "Yahoo Finance could not be reached."
+
+    result_bucket = payload.get("quoteResponse", {}) if isinstance(payload, dict) else {}
+    results = result_bucket.get("result", []) if isinstance(result_bucket, dict) else []
+    result_by_symbol = {}
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        symbol = str(item.get("symbol") or "").upper()
+        if symbol:
+            result_by_symbol[symbol] = item
 
     quotes = []
-    for symbol in settings["market_symbols"]:
-        ticker = yf.Ticker(symbol)
-        fast = getattr(ticker, "fast_info", None) or {}
-        history = ticker.history(period="5d", interval="1d", auto_adjust=False)
-        price = fast.get("lastPrice") or fast.get("regularMarketPrice")
-        prev_close = fast.get("previousClose")
-        if (price is None or prev_close in (None, 0)) and history is not None and not history.empty:
+    for symbol in symbols:
+        item = result_by_symbol.get(symbol)
+        if not item:
+            continue
+        price = item.get("regularMarketPrice")
+        prev_close = item.get("regularMarketPreviousClose") or item.get("regularMarketOpen")
+        change_pct = item.get("regularMarketChangePercent")
+        if change_pct in (None, ""):
             try:
-                price = price if price is not None else float(history["Close"].iloc[-1])
-                prev_close = prev_close if prev_close not in (None, 0) else float(history["Close"].iloc[-2])
+                if price is not None and prev_close not in (None, 0):
+                    change_pct = ((float(price) - float(prev_close)) / float(prev_close)) * 100.0
             except Exception:
-                pass
-        change_pct = 0.0
-        try:
-            if price is not None and prev_close not in (None, 0):
-                change_pct = ((float(price) - float(prev_close)) / float(prev_close)) * 100.0
-        except Exception:
-            change_pct = 0.0
-        label = symbol
-        try:
-            info = getattr(ticker, "info", {}) or {}
-            label = str(info.get("shortName") or info.get("longName") or symbol)
-        except Exception:
-            pass
+                change_pct = 0.0
+        label = str(item.get("shortName") or item.get("longName") or item.get("displayName") or symbol)
         quotes.append({
             "symbol": symbol,
             "label": label[:40],
