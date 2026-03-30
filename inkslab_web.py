@@ -3431,6 +3431,7 @@ function loadPlugins() {
       if (plugin.config_schema && plugin.config_schema.length) meta.push(plugin.config_schema.length + ' settings');
       if (plugin.version) meta.push('v' + plugin.version);
       if (plugin.author) meta.push(plugin.author);
+      if (plugin.install_method) meta.push(plugin.install_method);
       var summaryParts = [];
       summaryParts.push(sourceLabel);
       if (plugin.kind) summaryParts.push(plugin.kind.toUpperCase());
@@ -3445,6 +3446,9 @@ function loadPlugins() {
         note = 'This community plugin is installed locally. Configure it here, then use Show Now or include it in Display behavior.';
       } else if (plugin.source === 'local-manifest') {
         note = 'This community plugin was found, but it is not runnable yet. Check its manifest.json and __init__.py files.';
+      }
+      if (plugin.source === 'local-manifest' && plugin.source_url) {
+        note += ' Source: ' + plugin.source_url;
       }
       var settingsHtml = '';
       if (plugin.config_schema && plugin.config_schema.length) {

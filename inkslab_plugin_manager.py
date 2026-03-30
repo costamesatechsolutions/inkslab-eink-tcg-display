@@ -3,6 +3,7 @@
 Helpers for installing and removing community InkSlab plugins.
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -63,6 +64,16 @@ def _install_plugin_tree(plugin_root, replace_existing=False):
     }
 
 
+def _write_plugin_source_metadata(plugin_root, source_url="", install_method="manual"):
+    metadata_path = os.path.join(plugin_root, ".inkslab-source.json")
+    payload = {
+        "source_url": str(source_url or "")[:240],
+        "install_method": str(install_method or "manual")[:32],
+    }
+    with open(metadata_path, "w") as handle:
+        json.dump(payload, handle)
+
+
 def install_plugin_from_zip(upload_path, replace_existing=False):
     with tempfile.TemporaryDirectory(prefix="inkslab_plugin_zip_") as tmpdir:
         try:
@@ -71,6 +82,7 @@ def install_plugin_from_zip(upload_path, replace_existing=False):
         except zipfile.BadZipFile as exc:
             raise ValueError("The uploaded file was not a valid ZIP archive.") from exc
         plugin_root = _find_plugin_root(tmpdir)
+        _write_plugin_source_metadata(plugin_root, install_method="zip")
         return _install_plugin_tree(plugin_root, replace_existing=replace_existing)
 
 
@@ -95,6 +107,7 @@ def install_plugin_from_git(repo_url, replace_existing=False):
             stderr = (exc.stderr or "").strip()
             raise ValueError(stderr or "Could not clone the GitHub repository.") from exc
         plugin_root = _find_plugin_root(clone_dir)
+        _write_plugin_source_metadata(plugin_root, source_url=url, install_method="git")
         return _install_plugin_tree(plugin_root, replace_existing=replace_existing)
 
 

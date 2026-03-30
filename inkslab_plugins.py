@@ -35,6 +35,8 @@ class PluginDefinition:
     version: str = ""
     author: str = ""
     entrypoint: str = "__init__.py"
+    source_url: str = ""
+    install_method: str = ""
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -291,6 +293,23 @@ def _safe_manifest_schema(schema):
     return cleaned or None
 
 
+def _load_plugin_install_metadata(plugin_dir: str) -> Dict[str, str]:
+    metadata_path = os.path.join(plugin_dir, ".inkslab-source.json")
+    if not os.path.isfile(metadata_path):
+        return {}
+    try:
+        with open(metadata_path, "r") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        "source_url": _safe_manifest_value(data.get("source_url"))[:240],
+        "install_method": _safe_manifest_value(data.get("install_method"))[:32],
+    }
+
+
 def load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinition]:
     """Load a plugin manifest safely without executing plugin code."""
     try:
@@ -319,15 +338,17 @@ def load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefiniti
     config_schema = _safe_manifest_schema(manifest.get("config_schema"))
     if config_schema and not settings_keys:
         settings_keys = [str(field.get("key")) for field in config_schema if field.get("key")]
+    plugin_dir = os.path.dirname(manifest_path)
+    install_metadata = _load_plugin_install_metadata(plugin_dir)
     version = _safe_manifest_value(manifest.get("version"))[:24]
     author = _safe_manifest_value(manifest.get("author"))[:48]
     entrypoint = os.path.basename(_safe_manifest_value(manifest.get("entrypoint"), "__init__.py")) or "__init__.py"
-    runtime_enabled = bool(manifest.get("runtime_enabled")) and os.path.isfile(os.path.join(os.path.dirname(manifest_path), entrypoint))
+    runtime_enabled = bool(manifest.get("runtime_enabled")) and os.path.isfile(os.path.join(plugin_dir, entrypoint))
     card_dir_name = os.path.basename(_safe_manifest_value(manifest.get("card_library_dir")))
     card_dir_path = card_library_path(card_dir_name) if card_dir_name else None
     download_script = _safe_manifest_value(manifest.get("download_script"))[:120]
     if download_script:
-        candidate = os.path.join(os.path.dirname(manifest_path), os.path.basename(download_script))
+        candidate = os.path.join(plugin_dir, os.path.basename(download_script))
         download_script = candidate if os.path.isfile(candidate) else None
     else:
         download_script = None
@@ -349,6 +370,8 @@ def load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefiniti
         version=version,
         author=author,
         entrypoint=entrypoint,
+        source_url=install_metadata.get("source_url", ""),
+        install_method=install_metadata.get("install_method", ""),
     )
 
 
