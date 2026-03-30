@@ -31,6 +31,7 @@ from inkslab_paths import (
     PAUSE_FILE,
     PREV_TRIGGER,
     STATUS_FILE,
+    USER_PLUGIN_DIR,
     UNBOX_TRIGGER,
     UPDATE_LOCK_FILE,
     UPDATE_STATUS_FILE,
@@ -39,6 +40,7 @@ from inkslab_paths import (
     WIFI_FAILED_TRIGGER,
     WIFI_SETUP_TRIGGER,
 )
+from inkslab_plugin_manager import install_plugin_from_git, install_plugin_from_zip, uninstall_plugin
 from inkslab_plugins import (
     default_enabled_plugins,
     default_display_schedule,
@@ -90,6 +92,21 @@ TCG_REGISTRY = {
     for plugin_id, plugin in get_plugins().items()
 }
 TCG_LIBRARIES = get_card_libraries()
+
+
+def _refresh_plugin_registry():
+    global TCG_REGISTRY, TCG_LIBRARIES
+    TCG_REGISTRY = {
+        plugin_id: {
+            "name": plugin.name,
+            "path": plugin.card_library_path,
+            "color": plugin.accent_color,
+            "download_script": plugin.download_script,
+        }
+        for plugin_id, plugin in get_plugins().items()
+        if plugin.card_library_path
+    }
+    TCG_LIBRARIES = get_card_libraries()
 
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
@@ -556,8 +573,79 @@ def api_plugins():
         "display_mode": config["display_mode"],
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
+        "community_plugin_dir": USER_PLUGIN_DIR,
         "plugins": get_plugin_payload(),
     })
+
+
+@app.route('/api/plugins/install/git', methods=['POST'])
+def api_plugin_install_git():
+    body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": "Invalid request."}), 400
+    try:
+        result = install_plugin_from_git(body.get("url"), replace_existing=bool(body.get("replace_existing")))
+        _refresh_plugin_registry()
+        return jsonify({"ok": True, "plugin": result, "plugins": get_plugin_payload()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@app.route('/api/plugins/install/zip', methods=['POST'])
+def api_plugin_install_zip():
+    upload = request.files.get('plugin_zip')
+    replace_existing = str(request.form.get('replace_existing') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    if not upload or not upload.filename:
+        return jsonify({"ok": False, "error": "Choose a ZIP file first."}), 400
+    tmp_path = None
+    try:
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(prefix='inkslab_plugin_', suffix='.zip')
+        os.close(fd)
+        upload.save(tmp_path)
+        result = install_plugin_from_zip(tmp_path, replace_existing=replace_existing)
+        _refresh_plugin_registry()
+        return jsonify({"ok": True, "plugin": result, "plugins": get_plugin_payload()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+@app.route('/api/plugins/community/<plugin_id>', methods=['DELETE'])
+def api_plugin_uninstall(plugin_id):
+    plugin_id = os.path.basename(str(plugin_id or '').strip())
+    try:
+        result = uninstall_plugin(plugin_id)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    with _config_lock:
+        config = load_config()
+        enabled = [p for p in config.get("enabled_plugins", []) if p != plugin_id]
+        settings_bucket = config.get("plugin_settings") if isinstance(config.get("plugin_settings"), dict) else {}
+        settings_bucket.pop(plugin_id, None)
+        config["enabled_plugins"] = enabled
+        if config.get("active_plugin") == plugin_id or config.get("active_tcg") == plugin_id:
+            fallback = enabled[0] if enabled else 'pokemon'
+            config["active_plugin"] = fallback
+            config["active_tcg"] = fallback
+            config["single_plugin"] = fallback
+        config["plugin_settings"] = settings_bucket
+        config = normalize_display_config(config)
+        save_config(config)
+
+    _refresh_plugin_registry()
+    try:
+        with open(NEXT_TRIGGER, 'w') as f:
+            f.write('1')
+    except OSError:
+        pass
+    return jsonify({"ok": True, "plugin": result, "plugins": get_plugin_payload()})
 
 
 @app.route('/api/plugins/config', methods=['POST'])
@@ -2672,6 +2760,19 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div class="pill-note">Enable apps, then adjust their settings</div>
     </div>
     <div class="card">
+      <h3>Community Plugins</h3>
+      <p class="context-note">Install community plugins from a GitHub repo URL or a ZIP package. This is the path toward a real plugin ecosystem without needing SSH for every install.</p>
+      <div class="form-group">
+        <label>GitHub Repo URL</label>
+        <input type="text" id="plugin-git-url" placeholder="https://github.com/you/inkslab-plugin">
+      </div>
+      <div class="flex-row" style="margin-bottom:8px">
+        <button class="btn btn-secondary btn-block" onclick="installPluginFromGit()">Install from GitHub</button>
+        <label class="btn btn-secondary btn-block" style="cursor:pointer;text-align:center">Install ZIP<input type="file" id="plugin-zip-file" accept=".zip" style="display:none" onchange="installPluginFromZip(this.files)"></label>
+      </div>
+      <div id="plugin-install-note" class="subtle-note">Community plugins folder: loading...</div>
+    </div>
+    <div class="card">
       <h3>Installed Apps</h3>
       <p class="context-note">Enable only the apps you want this slab to use. After an app is enabled, you can show it right away or include it in the display behavior above.</p>
       <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
@@ -3299,6 +3400,7 @@ function loadPlugins() {
     var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
     var pluginSettings = d.plugin_settings || {};
     var active = d.active_plugin || '';
+    var communityDir = d.community_plugin_dir || '/home/pi/inkslab_plugins';
     var entries = Object.entries(plugins).sort(function(a, b) {
       var aPlugin = a[1] || {};
       var bPlugin = b[1] || {};
@@ -3315,6 +3417,7 @@ function loadPlugins() {
       var plugin = entry[1] || {};
       var isRuntime = !!plugin.runtime_enabled;
       var isEnabled = enabledPlugins.indexOf(id) !== -1;
+      var isUserInstalled = plugin.source === 'local-manifest' && plugin.manifest_path && String(plugin.manifest_path).indexOf(communityDir + '/') === 0;
       var sourceLabel = plugin.source === 'local-manifest' ? 'Community' : 'Built-in';
       var badge = id === active
         ? '<span class="plugin-badge">Active</span>'
@@ -3340,6 +3443,8 @@ function loadPlugins() {
         : 'This app is part of the modular roadmap and is not runnable yet.';
       if (plugin.source === 'local-manifest' && isRuntime) {
         note = 'This community plugin is installed locally. Configure it here, then use Show Now or include it in Display behavior.';
+      } else if (plugin.source === 'local-manifest') {
+        note = 'This community plugin was found, but it is not runnable yet. Check its manifest.json and __init__.py files.';
       }
       var settingsHtml = '';
       if (plugin.config_schema && plugin.config_schema.length) {
@@ -3389,6 +3494,9 @@ function loadPlugins() {
             ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Use On This Slab</label>' +
               '<button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Show Now</button>'
             : '<div class="plugin-note" style="margin-top:0">Not runnable yet</div>') +
+          (isUserInstalled
+            ? '<button class="btn btn-danger btn-sm" onclick="uninstallCommunityPlugin(\\'' + id + '\\')">Remove</button>'
+            : '') +
         '</div>' +
         '<div class="plugin-body">' +
           '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
@@ -3402,6 +3510,83 @@ function loadPlugins() {
   }).catch(function() {
     var summaryEl = document.getElementById('plugin-summary');
     if (summaryEl) summaryEl.textContent = 'Could not load plugins.';
+  });
+}
+
+function loadPluginInstallInfo() {
+  fetch(API + '/api/plugins').then(r => r.json()).then(function(d) {
+    var noteEl = document.getElementById('plugin-install-note');
+    if (noteEl) noteEl.textContent = 'Community plugins folder: ' + (d.community_plugin_dir || '/home/pi/inkslab_plugins');
+  });
+}
+
+function installPluginFromGit() {
+  var input = document.getElementById('plugin-git-url');
+  var url = input ? input.value.trim() : '';
+  if (!url) {
+    showToast('Paste a GitHub repo URL first');
+    return;
+  }
+  fetch(API + '/api/plugins/install/git', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url: url})
+  }).then(r => r.json()).then(function(d) {
+    if (d && d.ok) {
+      if (input) input.value = '';
+      showToast('Plugin installed');
+      loadPlugins();
+      loadDisplayPlan();
+      loadPluginInstallInfo();
+      startRapidPoll();
+    } else {
+      showToast((d && d.error) || 'Plugin install failed', 5000);
+    }
+  }).catch(function() {
+    showToast('Plugin install failed', 5000);
+  });
+}
+
+function installPluginFromZip(files) {
+  if (!files || !files.length) return;
+  var fd = new FormData();
+  fd.append('plugin_zip', files[0]);
+  fetch(API + '/api/plugins/install/zip', {
+    method:'POST',
+    body: fd
+  }).then(r => r.json()).then(function(d) {
+    var input = document.getElementById('plugin-zip-file');
+    if (input) input.value = '';
+    if (d && d.ok) {
+      showToast('Plugin installed');
+      loadPlugins();
+      loadDisplayPlan();
+      loadPluginInstallInfo();
+      startRapidPoll();
+    } else {
+      showToast((d && d.error) || 'Plugin install failed', 5000);
+    }
+  }).catch(function() {
+    showToast('Plugin install failed', 5000);
+  });
+}
+
+function uninstallCommunityPlugin(pluginId) {
+  if (!confirm('Remove this community plugin from the slab?')) return;
+  fetch(API + '/api/plugins/community/' + encodeURIComponent(pluginId), {
+    method:'DELETE'
+  }).then(r => r.json()).then(function(d) {
+    if (d && d.ok) {
+      showToast('Plugin removed');
+      loadPlugins();
+      loadDisplayPlan();
+      loadPluginInstallInfo();
+      startRapidPoll();
+    } else {
+      showToast((d && d.error) || 'Could not remove plugin', 5000);
+    }
+  }).catch(function() {
+    showToast('Could not remove plugin', 5000);
   });
 }
 
@@ -4447,6 +4632,7 @@ function buildDynamicUI(registry) {
   // Load TCG registry first, then build UI
   fetch(API + '/api/tcg_list').then(r => r.json()).then(function(registry) {
     buildDynamicUI(registry);
+    loadPluginInstallInfo();
     // Now do everything else
     const saved = localStorage.getItem('inkslab_tab');
     if (saved && document.getElementById('tab-' + saved)) {

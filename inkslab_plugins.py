@@ -291,7 +291,7 @@ def _safe_manifest_schema(schema):
     return cleaned or None
 
 
-def _load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinition]:
+def load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinition]:
     """Load a plugin manifest safely without executing plugin code."""
     try:
         with open(manifest_path, "r") as f:
@@ -367,7 +367,7 @@ def discover_external_plugins() -> Dict[str, PluginDefinition]:
             manifest_path = os.path.join(plugin_dir, "manifest.json")
             if not os.path.isdir(plugin_dir) or not os.path.isfile(manifest_path):
                 continue
-            plugin = _load_external_plugin_manifest(manifest_path)
+            plugin = load_external_plugin_manifest(manifest_path)
             if not plugin or plugin.plugin_id in BUILTIN_PLUGINS or plugin.plugin_id in discovered:
                 continue
             discovered[plugin.plugin_id] = plugin

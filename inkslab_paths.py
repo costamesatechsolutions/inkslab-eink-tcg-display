@@ -24,6 +24,7 @@ CALENDAR_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_calendar_cache.json")
 MARKET_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_market_cache.json")
 CURRENT_PREVIEW_FILE = os.path.join(RUNTIME_DIR, "inkslab_current_preview.png")
 PLUGIN_RUNTIME_CACHE_DIR = os.path.join(RUNTIME_DIR, "inkslab_plugin_runtime")
+USER_PLUGIN_DIR = os.path.join(HOME_DIR, "inkslab_plugins")
 
 NEXT_TRIGGER = os.path.join(RUNTIME_DIR, "inkslab_next")
 PREV_TRIGGER = os.path.join(RUNTIME_DIR, "inkslab_prev")
@@ -44,5 +45,5 @@ def card_library_path(dirname: str) -> str:
 def plugin_search_dirs():
     return [
         os.path.join(PROJECT_ROOT, "plugins"),
-        os.path.join(HOME_DIR, "inkslab_plugins"),
+        USER_PLUGIN_DIR,
     ]
