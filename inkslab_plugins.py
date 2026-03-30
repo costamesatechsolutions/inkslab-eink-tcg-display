@@ -8,6 +8,9 @@ internal plugins so the daemon and web UI can share a single source of truth.
 """
 
 from dataclasses import asdict, dataclass
+import json
+import os
+import re
 import time
 from typing import Dict, List, Optional
 
@@ -24,6 +27,9 @@ class PluginDefinition:
     description: str = ""
     builtin: bool = True
     settings_keys: Optional[List[str]] = None
+    source: str = "builtin"
+    manifest_path: Optional[str] = None
+    runtime_enabled: bool = True
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -71,39 +77,112 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
     ),
 }
 
+PLUGIN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,31}$")
+PLUGIN_DIRS = [
+    os.path.join(os.path.dirname(os.path.realpath(__file__)), "plugins"),
+    "/home/pi/inkslab_plugins",
+]
+
+
+def _safe_manifest_value(value, default=""):
+    return str(value).strip() if value is not None else default
+
+
+def _load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinition]:
+    """Load a plugin manifest safely without executing plugin code."""
+    try:
+        with open(manifest_path, "r") as f:
+            manifest = json.load(f)
+    except Exception:
+        return None
+    if not isinstance(manifest, dict):
+        return None
+
+    plugin_id = _safe_manifest_value(manifest.get("plugin_id"))
+    if not PLUGIN_ID_RE.match(plugin_id):
+        return None
+    name = _safe_manifest_value(manifest.get("name"))[:48]
+    if not name:
+        return None
+    kind = _safe_manifest_value(manifest.get("kind"), "module").lower()
+    if kind not in ("module", "tcg", "weather", "news", "market", "calendar", "reminders", "transit", "traffic", "sports"):
+        kind = "module"
+
+    settings_keys = manifest.get("settings_keys")
+    if isinstance(settings_keys, list):
+        settings_keys = [str(k).strip() for k in settings_keys[:20] if str(k).strip()]
+    else:
+        settings_keys = []
+
+    return PluginDefinition(
+        plugin_id=plugin_id,
+        name=name,
+        kind=kind,
+        accent_color=_safe_manifest_value(manifest.get("accent_color")) or None,
+        description=_safe_manifest_value(manifest.get("description"))[:160],
+        builtin=False,
+        settings_keys=settings_keys,
+        source="local-manifest",
+        manifest_path=manifest_path,
+        runtime_enabled=False,
+    )
+
+
+def discover_external_plugins() -> Dict[str, PluginDefinition]:
+    """Discover local plugin manifests without executing plugin code."""
+    discovered: Dict[str, PluginDefinition] = {}
+    for base_dir in PLUGIN_DIRS:
+        if not os.path.isdir(base_dir):
+            continue
+        try:
+            entries = sorted(os.listdir(base_dir))
+        except OSError:
+            continue
+        for entry in entries:
+            plugin_dir = os.path.join(base_dir, entry)
+            manifest_path = os.path.join(plugin_dir, "manifest.json")
+            if not os.path.isdir(plugin_dir) or not os.path.isfile(manifest_path):
+                continue
+            plugin = _load_external_plugin_manifest(manifest_path)
+            if not plugin or plugin.plugin_id in BUILTIN_PLUGINS or plugin.plugin_id in discovered:
+                continue
+            discovered[plugin.plugin_id] = plugin
+
 
 def get_plugins() -> Dict[str, PluginDefinition]:
-    """Return all currently available built-in plugins."""
-    return BUILTIN_PLUGINS
+    """Return built-in plugins plus safe-discovered local plugin manifests."""
+    plugins = dict(BUILTIN_PLUGINS)
+    plugins.update(discover_external_plugins())
+    return plugins
 
 
 def get_plugin(plugin_id: str) -> Optional[PluginDefinition]:
     """Return a plugin definition by ID, or None if missing."""
-    return BUILTIN_PLUGINS.get(plugin_id)
+    return get_plugins().get(plugin_id)
 
 
 def get_plugin_payload() -> Dict[str, Dict[str, object]]:
     """Return plugin metadata in a JSON-friendly shape for the web UI."""
-    return {plugin_id: plugin.to_dict() for plugin_id, plugin in BUILTIN_PLUGINS.items()}
+    return {plugin_id: plugin.to_dict() for plugin_id, plugin in get_plugins().items()}
 
 
 def get_card_libraries() -> Dict[str, str]:
     """Return plugin -> card library path for TCG-backed plugins."""
     return {
         plugin_id: plugin.card_library_path
-        for plugin_id, plugin in BUILTIN_PLUGINS.items()
+        for plugin_id, plugin in get_plugins().items()
         if plugin.card_library_path
     }
 
 
 def get_plugin_ids() -> List[str]:
     """Return valid plugin IDs."""
-    return list(BUILTIN_PLUGINS.keys())
+    return list(get_plugins().keys())
 
 
 def normalize_active_plugin(value: Optional[str], default: str = "pokemon") -> str:
     """Normalize a requested active plugin ID to a known built-in plugin."""
-    if value in BUILTIN_PLUGINS:
+    if value in get_plugins():
         return str(value)
     return default
 

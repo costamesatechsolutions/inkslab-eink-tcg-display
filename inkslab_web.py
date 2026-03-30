@@ -1372,7 +1372,7 @@ def _git_remote_branches(fetch_first=False):
     """Return available remote branches on origin."""
     if fetch_first:
         try:
-            subprocess.run(['git', 'fetch', 'origin'],
+            subprocess.run(['git', 'fetch', '--prune', 'origin'],
                            cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=30)
         except Exception:
             pass
@@ -1442,7 +1442,7 @@ def api_update_check():
     try:
         body = request.get_json(silent=True) or {}
         # Fetch first so branch detection can see remote refs
-        fetch = subprocess.run(['git', 'fetch', 'origin'], cwd=SCRIPT_DIR,
+        fetch = subprocess.run(['git', 'fetch', '--prune', 'origin'], cwd=SCRIPT_DIR,
                                capture_output=True, text=True, timeout=30)
         if fetch.returncode != 0:
             return jsonify({"ok": False, "error": "Could not reach update server. Check your internet connection."})

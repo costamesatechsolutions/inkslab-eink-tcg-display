@@ -95,7 +95,7 @@ PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null)
 write_status "fetching" "Checking for updates..." ""
 FETCH_OK=false
 for i in 1 2 3; do
-    if timeout 60 git fetch origin 2>&1; then
+    if timeout 60 git fetch --prune origin 2>&1; then
         FETCH_OK=true
         break
     fi
