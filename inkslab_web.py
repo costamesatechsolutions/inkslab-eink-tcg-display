@@ -2539,11 +2539,14 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .plugin-toggle { display: flex; align-items: center; gap: 6px; color: #D8E6E4; font-size: 12px; }
 .plugin-note { font-size: 11px; color: #8899a6; margin-top: 6px; }
+.context-note { font-size: 12px; color: #6BCCBD; margin: 6px 0 10px; line-height: 1.45; }
+.subtle-note { font-size: 11px; color: #8899a6; margin-top: 6px; line-height: 1.4; }
 .schedule-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .schedule-editor-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px; background: #132E3E; }
 .schedule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .plugin-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
 .plugin-checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #D8E6E4; }
+.pill-note { display: inline-flex; align-items: center; gap: 6px; background: #1F333F; border: 1px solid #36A5CA44; color: #D8E6E4; border-radius: 999px; padding: 4px 10px; font-size: 11px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -2553,10 +2556,10 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="display" onclick="showTab('display')">Display</div>
-  <div class="tab" data-tab="settings" onclick="showTab('settings')">Settings</div>
-  <div class="tab" data-tab="collection" onclick="showTab('collection')">My Cards</div>
-  <div class="tab" data-tab="downloads" onclick="showTab('downloads')">Downloads</div>
+  <div class="tab active" id="tab-btn-display" data-tab="display" onclick="showTab('display')">Display</div>
+  <div class="tab" id="tab-btn-settings" data-tab="settings" onclick="showTab('settings')">Dashboard</div>
+  <div class="tab" id="tab-btn-collection" data-tab="collection" onclick="showTab('collection')">Library</div>
+  <div class="tab" id="tab-btn-downloads" data-tab="downloads" onclick="showTab('downloads')">Data</div>
 </div>
 
 <div class="content">
@@ -2597,8 +2600,9 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div class="q-list" id="q-prev-list"></div>
     </div>
   </div>
-  <div class="card">
+  <div class="card" id="quick-switch-card">
     <h3>Quick Switch</h3>
+    <p class="subtle-note">TCG-only shortcut for fast library hopping while testing card plugins.</p>
     <div class="flex-row" id="quick-switch-btns"></div>
   </div>
 </div>
@@ -2606,10 +2610,12 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- SETTINGS TAB -->
 <div id="tab-settings" class="panel">
   <div class="card">
-    <h3>Display Settings</h3>
-    <div class="form-group">
-      <label>Active TCG</label>
+    <h3>Core Display</h3>
+    <p class="context-note">These are the shared device settings that apply to the whole dashboard, no matter which plugins you enable.</p>
+    <div class="form-group" id="default-tcg-group">
+      <label>Default TCG Plugin</label>
       <select id="cfg-tcg"></select>
+      <div class="subtle-note">Legacy compatibility control for the current card renderer. If you only use weather, traffic, or other ambient plugins later, you can ignore this.</div>
     </div>
     <div class="form-group">
       <label>Slab Header</label>
@@ -2659,13 +2665,23 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <div class="form-group">
       <div class="toggle">
         <input type="checkbox" id="cfg-collection">
-        <label for="cfg-collection">Show only My Cards (selected cards mode)</label>
+        <label for="cfg-collection">TCG-only: show only My Cards</label>
       </div>
+      <div class="subtle-note">Only affects card plugins. Ambient plugins like weather or traffic ignore this.</div>
     </div>
     <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
   </div>
   <div class="card">
+    <h3>Plugin Manager</h3>
+    <p class="context-note">Enable only the plugins this device should actually use. A weather-only or traffic-only build should feel just as natural here as a TCG build.</p>
+    <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
+    <div id="plugin-list" class="plugin-list"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Plugin Selection</button>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Built-in roadmap plugins already appear here so the architecture stays honest while we turn them into real modules.</p>
+  </div>
+  <div class="card">
     <h3>Display Plan</h3>
+    <p class="context-note">Choose whether the screen stays on one plugin or rotates through a calm schedule like cards, weather, and news.</p>
     <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
     <div id="display-plan-list" class="schedule-list"></div>
     <div class="form-group" style="margin-top:12px">
@@ -2684,14 +2700,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
     </div>
     <div id="display-plan-editor" class="schedule-editor"></div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">This is the foundation for easy scheduling later. For now, playback still follows the current active plugin while we build the rest of the system safely.</p>
-  </div>
-  <div class="card">
-    <h3>Installed Plugins</h3>
-    <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
-    <div id="plugin-list" class="plugin-list"></div>
-    <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Plugin Selection</button>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">This branch is preparing for installable modules. Right now these are built-in plugins using the new shared plugin system.</p>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">The scheduler already understands rotation. As more plugins become runnable, this is where the dashboard starts feeling truly modular.</p>
   </div>
   <div class="card">
     <h3>Software Update</h3>
@@ -2727,6 +2736,11 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- COLLECTION TAB -->
 <div id="tab-collection" class="panel">
   <div class="card">
+    <h3>Plugin Library Tools</h3>
+    <p class="context-note">This area is only for card-library plugins today. If your device only runs weather, traffic, news, or other ambient modules, you can ignore this whole tab.</p>
+    <div class="pill-note">TCG-specific tools</div>
+  </div>
+  <div class="card">
     <h3>My Cards</h3>
     <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like — favorites, a themed set, a wish list, or cards you collect. Enable "My Cards mode" in Settings to only show these.</p>
     <button class="btn btn-secondary btn-sm" onclick="clearCollection()">Clear All</button>
@@ -2756,6 +2770,11 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 
 <!-- DOWNLOADS TAB -->
 <div id="tab-downloads" class="panel">
+  <div class="card">
+    <h3>Data & Imports</h3>
+    <p class="context-note">This tab currently manages card downloads and custom image sets. As plugins mature, this will become the home for plugin data sources and imports more broadly.</p>
+    <div class="pill-note">Currently focused on TCG and image plugins</div>
+  </div>
   <div class="card">
     <h3>Storage</h3>
     <div id="storage-info"></div>
@@ -2854,6 +2873,7 @@ var _rapidPoll = null;
 var _pendingAction = false;
 var _mainPoll = null;
 var _countdownTimer = null;
+var _pluginUiState = null;
 
 function startMainPoll() {
   if (_mainPoll) clearInterval(_mainPoll);
@@ -3213,6 +3233,7 @@ function saveUpdateBranch() {
 
 function loadPlugins() {
   fetch(API + '/api/plugins').then(r => r.json()).then(function(d) {
+    _pluginUiState = d;
     var summaryEl = document.getElementById('plugin-summary');
     var listEl = document.getElementById('plugin-list');
     if (!summaryEl || !listEl) return;
@@ -3251,10 +3272,40 @@ function loadPlugins() {
         (isRuntime ? '<div class="plugin-note">' + esc(note) + '</div>' : '') +
       '</div>';
     }).join('');
+    syncModularUI(d);
   }).catch(function() {
     var summaryEl = document.getElementById('plugin-summary');
     if (summaryEl) summaryEl.textContent = 'Could not load plugins.';
   });
+}
+
+function hasEnabledPluginKind(kind) {
+  if (!_pluginUiState) return true;
+  var plugins = _pluginUiState.plugins || {};
+  var enabled = Array.isArray(_pluginUiState.enabled_plugins) ? _pluginUiState.enabled_plugins : [];
+  return enabled.some(function(id) {
+    return plugins[id] && plugins[id].kind === kind;
+  });
+}
+
+function syncModularUI(d) {
+  var state = d || _pluginUiState;
+  if (!state) return;
+  var hasTCG = hasEnabledPluginKind('tcg');
+  var quickSwitch = document.getElementById('quick-switch-card');
+  var collectionTabBtn = document.getElementById('tab-btn-collection');
+  var downloadsTabBtn = document.getElementById('tab-btn-downloads');
+  var defaultTcgGroup = document.getElementById('default-tcg-group');
+  if (quickSwitch) quickSwitch.style.display = hasTCG ? 'block' : 'none';
+  if (collectionTabBtn) collectionTabBtn.style.display = hasTCG ? '' : 'none';
+  if (downloadsTabBtn) downloadsTabBtn.style.display = hasTCG ? '' : 'none';
+  if (defaultTcgGroup) defaultTcgGroup.style.display = hasTCG ? 'block' : 'none';
+  if (!hasTCG) {
+    var activeTab = localStorage.getItem('inkslab_tab');
+    if (activeTab === 'collection' || activeTab === 'downloads') {
+      showTab('settings');
+    }
+  }
 }
 
 function collectEnabledPlugins() {
