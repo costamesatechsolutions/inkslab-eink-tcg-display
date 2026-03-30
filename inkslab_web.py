@@ -2534,10 +2534,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div class="q-list" id="q-prev-list"></div>
     </div>
   </div>
-  <div class="card" id="quick-switch-card">
-    <h3>Quick Switch</h3>
-    <p class="subtle-note">TCG-only shortcut for fast library hopping while testing card plugins.</p>
-    <div class="flex-row" id="quick-switch-btns"></div>
+  <div class="card" id="display-mode-card">
+    <h3>Display Mode</h3>
+    <p id="display-mode-note" class="context-note">Loading display behavior...</p>
+    <div id="quick-switch-card" style="display:none">
+      <p class="subtle-note">Manual TCG switching is useful for testing, but your saved display plan is the normal source of truth.</p>
+      <div class="flex-row" id="quick-switch-btns"></div>
+    </div>
   </div>
 </div>
 
@@ -3235,7 +3238,10 @@ function syncModularUI(d) {
   var collectionTabBtn = document.getElementById('tab-btn-collection');
   var downloadsTabBtn = document.getElementById('tab-btn-downloads');
   var defaultTcgGroup = document.getElementById('default-tcg-group');
-  if (quickSwitch) quickSwitch.style.display = hasTCG ? 'block' : 'none';
+  if (quickSwitch) {
+    var showManualSwitch = hasTCG && _displayPlanState && _displayPlanState.display_mode === 'single';
+    quickSwitch.style.display = showManualSwitch ? 'block' : 'none';
+  }
   if (collectionTabBtn) collectionTabBtn.style.display = hasTCG ? '' : 'none';
   if (downloadsTabBtn) downloadsTabBtn.style.display = hasTCG ? '' : 'none';
   if (defaultTcgGroup) defaultTcgGroup.style.display = hasTCG ? 'block' : 'none';
@@ -3279,6 +3285,7 @@ function loadDisplayPlan() {
     _displayPlanState = d;
     var summaryEl = document.getElementById('display-plan-summary');
     var listEl = document.getElementById('display-plan-list');
+    var modeNoteEl = document.getElementById('display-mode-note');
     var modeEl = document.getElementById('display-mode');
     var singleEl = document.getElementById('single-plugin');
     if (!summaryEl || !listEl) return;
@@ -3302,8 +3309,10 @@ function loadDisplayPlan() {
     }
     if (mode === 'schedule') {
       summaryEl.textContent = 'Schedule mode is enabled. Active right now: ' + (d.active_plugin || '-') + '.';
+      if (modeNoteEl) modeNoteEl.textContent = 'This device is following a saved schedule. Active right now: ' + (d.active_plugin || '-') + '.';
     } else {
       summaryEl.textContent = 'Single mode is active. Current plugin: ' + (d.single_plugin || d.active_plugin || '-');
+      if (modeNoteEl) modeNoteEl.textContent = 'This device stays on one plugin until the display plan changes. Current plugin: ' + (d.single_plugin || d.active_plugin || '-') + '.';
     }
     listEl.innerHTML = schedule.map(function(item) {
       var title = esc(item.label || item.plugin_id || '');
@@ -3320,6 +3329,7 @@ function loadDisplayPlan() {
       '</div>';
     }).join('');
     renderDisplayPlanEditor(schedule, selectablePlugins);
+    syncModularUI();
   }).catch(function() {
     var summaryEl = document.getElementById('display-plan-summary');
     if (summaryEl) summaryEl.textContent = 'Could not load display plan.';
