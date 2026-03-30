@@ -297,7 +297,7 @@ def _wrap_text(draw, text, font, max_width):
             current = word
     if current:
         lines.append(current)
-    return lines[:2]
+    return lines[:3]
 
 
 def _draw_metric_box(draw, left, top, width, height, title, value, accent=(0, 0, 255)):
@@ -306,23 +306,31 @@ def _draw_metric_box(draw, left, top, width, height, title, value, accent=(0, 0,
     draw.text((left + 14, top + 40), value, fill=(0, 0, 0), font=_load_font(22, bold=True))
 
 
+def _draw_forecast_box(draw, left, top, width, height, period, units_suffix):
+    draw.rounded_rectangle((left, top, left + width, top + height), radius=14, outline=(0, 0, 255), width=2, fill=(255, 255, 255))
+    draw.text((left + 10, top + 10), period.get("time", "--"), fill=(0, 0, 0), font=_load_font(14, bold=True))
+    draw.text((left + 10, top + 34), period.get("condition", "--"), fill=(0, 0, 255), font=_load_font(13))
+    temp_label = _format_temp(period.get("temperature")) + " " + units_suffix
+    draw.text((left + 10, top + 58), temp_label, fill=(0, 0, 0), font=_load_font(18, bold=True))
+
+
 def render_weather_canvas(config):
     snapshot = fetch_weather_snapshot(config)
     canvas = Image.new("RGB", (400, 600), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    font_title = _load_font(24, bold=True)
-    font_location = _load_font(22, bold=True)
-    font_large = _load_font(84, bold=True)
+    font_title = _load_font(20, bold=True)
+    font_location = _load_font(24, bold=True)
+    font_large = _load_font(90, bold=True)
     font_body = _load_font(22)
     font_body_bold = _load_font(22, bold=True)
     font_small = _load_font(15)
 
-    draw.rectangle((0, 0, 400, 96), fill=(0, 0, 255))
+    draw.rectangle((0, 0, 400, 118), fill=(0, 0, 255))
     draw.text((22, 16), "Weather", fill=(255, 255, 255), font=font_title)
-    location_lines = _wrap_text(draw, snapshot.get("location_label", "Weather"), font_location, 280)
+    location_lines = _wrap_text(draw, snapshot.get("location_label", "Weather"), font_location, 340)
     for idx, line in enumerate(location_lines):
-        draw.text((22, 46 + (idx * 24)), line, fill=(255, 255, 255), font=font_location)
+        draw.text((22, 42 + (idx * 26)), line, fill=(255, 255, 255), font=font_location)
 
     if not snapshot.get("ok"):
         draw.rounded_rectangle((22, 120, 378, 520), radius=18, outline=(0, 0, 255), width=3, fill=(255, 255, 255))
@@ -344,35 +352,31 @@ def render_weather_canvas(config):
     low = _format_temp(snapshot.get("low"))
     wind_speed = _format_temp(snapshot.get("wind_speed"))
 
-    draw.text((22, 150), temperature, fill=(0, 0, 0), font=font_large)
-    draw.text((145, 170), units_suffix, fill=(255, 128, 0), font=font_body_bold)
-    draw.text((24, 238), snapshot.get("condition_label", "Weather"), fill=(0, 0, 255), font=font_body_bold)
+    draw.rectangle((0, 118, 400, 288), fill=(252, 253, 240))
+    draw.text((22, 136), temperature, fill=(0, 0, 0), font=font_large)
+    draw.text((162, 160), units_suffix, fill=(255, 128, 0), font=font_body_bold)
+    draw.text((24, 234), snapshot.get("condition_label", "Weather"), fill=(0, 0, 255), font=font_body_bold)
+    draw.text((24, 262), "Today " + high + " / " + low + " " + units_suffix, fill=(0, 0, 0), font=font_small)
 
-    _draw_metric_box(draw, 20, 290, 172, 92, "High / Low", high + " / " + low + " " + units_suffix)
-    _draw_metric_box(draw, 208, 290, 172, 92, "Feels Like", apparent + " " + units_suffix)
-    _draw_metric_box(draw, 20, 392, 172, 92, "Wind", wind_speed + " " + wind_suffix, accent=(255, 128, 0))
+    _draw_metric_box(draw, 20, 300, 172, 88, "Feels Like", apparent + " " + units_suffix)
+    _draw_metric_box(draw, 208, 300, 172, 88, "Wind", wind_speed + " " + wind_suffix, accent=(255, 128, 0))
+    _draw_metric_box(draw, 20, 398, 172, 88, "Sunrise", _format_clock(snapshot.get("sunrise")))
+    _draw_metric_box(draw, 208, 398, 172, 88, "Sunset", _format_clock(snapshot.get("sunset")), accent=(0, 255, 0))
+
     precip_text = (_format_temp(snapshot.get("precipitation_probability_max")) + "%")
-    _draw_metric_box(draw, 208, 392, 172, 92, "Rain Chance", precip_text, accent=(0, 255, 0))
-
-    sunrise = _format_clock(snapshot.get("sunrise"))
-    sunset = _format_clock(snapshot.get("sunset"))
     uv = _format_temp(snapshot.get("uv_index_max"))
-    draw.text((24, 510), "Sunrise " + sunrise, fill=(0, 0, 0), font=font_small)
-    draw.text((210, 510), "Sunset " + sunset, fill=(0, 0, 0), font=font_small)
-    draw.text((24, 534), "UV Max " + uv, fill=(0, 0, 0), font=font_small)
+    draw.text((24, 512), "Rain Chance " + precip_text, fill=(0, 0, 0), font=font_small)
+    draw.text((210, 512), "UV Max " + uv, fill=(0, 0, 0), font=font_small)
 
     next_periods = snapshot.get("next_periods") or []
     if next_periods:
-        draw.text((210, 534), "Next Up", fill=(0, 0, 255), font=font_small)
-        x = 208
-        for period in next_periods[:2]:
-            label = period.get("time", "--")
-            temp_label = _format_temp(period.get("temperature")) + " " + units_suffix
-            draw.text((x, 556), label, fill=(0, 0, 0), font=font_small)
-            draw.text((x + 68, 556), temp_label, fill=(0, 0, 0), font=font_small, anchor="ra")
-            x += 82
+        draw.text((24, 536), "Next Up", fill=(0, 0, 255), font=font_small)
+        box_left = 20
+        for period in next_periods[:3]:
+            _draw_forecast_box(draw, box_left, 550, 114, 42, period, units_suffix)
+            box_left += 122
 
     updated_struct = time.localtime(snapshot.get("updated_at", int(time.time())))
-    draw.text((24, 582), "Updated " + time.strftime("%-I:%M %p", updated_struct), fill=(0, 0, 0), font=font_small)
-    draw.text((376, 582), "Open-Meteo", fill=(0, 0, 255), font=font_small, anchor="ra")
+    draw.text((24, 580), "Updated " + time.strftime("%-I:%M %p", updated_struct), fill=(0, 0, 0), font=_load_font(13))
+    draw.text((376, 580), "Open-Meteo", fill=(0, 0, 255), font=_load_font(13), anchor="ra")
     return canvas, snapshot
