@@ -20,6 +20,7 @@ import time
 import threading
 from flask import Flask, request, jsonify, send_file, redirect, make_response
 import wifi_manager
+from inkslab_plugins import get_card_libraries, get_plugin_payload, get_plugins
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
@@ -38,12 +39,15 @@ DOWNLOAD_LOG = "/tmp/inkslab_download.log"
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 TCG_REGISTRY = {
-    "pokemon": {"name": "Pokemon", "path": "/home/pi/pokemon_cards", "color": "#36A5CA", "download_script": "download_cards_pokemon.py"},
-    "mtg":     {"name": "Magic: The Gathering", "path": "/home/pi/mtg_cards", "color": "#6BCCBD", "download_script": "download_cards_mtg.py"},
-    "lorcana": {"name": "Disney Lorcana", "path": "/home/pi/lorcana_cards", "color": "#C084FC", "download_script": "download_cards_lorcana.py"},
-    "custom":  {"name": "Custom", "path": "/home/pi/custom_cards", "color": "#F59E0B", "download_script": None},
+    plugin_id: {
+        "name": plugin.name,
+        "path": plugin.card_library_path,
+        "color": plugin.accent_color,
+        "download_script": plugin.download_script,
+    }
+    for plugin_id, plugin in get_plugins().items()
 }
-TCG_LIBRARIES = {k: v["path"] for k, v in TCG_REGISTRY.items()}
+TCG_LIBRARIES = get_card_libraries()
 
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
@@ -538,6 +542,12 @@ def api_card_image(tcg, set_id, card_id):
 def api_tcg_list():
     """Return the TCG registry for dynamic UI generation."""
     return jsonify(TCG_REGISTRY)
+
+
+@app.route('/api/plugins')
+def api_plugins():
+    """Return plugin metadata for the modular feature branch UI."""
+    return jsonify(get_plugin_payload())
 
 
 @app.route('/api/sets')

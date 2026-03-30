@@ -21,6 +21,7 @@ import logging
 import signal
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
 import wifi_manager
+from inkslab_plugins import get_card_libraries
 
 # --- DEFAULT CONFIGURATION ---
 # These defaults are used if no config file exists.
@@ -39,14 +40,7 @@ DEFAULTS = {
     "timezone_name": None,
 }
 
-# --- DYNAMIC TCG REGISTRY ---
-TCG_REGISTRY = {
-    "pokemon": {"name": "Pokemon", "path": "/home/pi/pokemon_cards", "color": "#36A5CA", "download_script": "download_cards_pokemon.py"},
-    "mtg":     {"name": "Magic: The Gathering", "path": "/home/pi/mtg_cards", "color": "#6BCCBD", "download_script": "download_cards_mtg.py"},
-    "lorcana": {"name": "Disney Lorcana", "path": "/home/pi/lorcana_cards", "color": "#C084FC", "download_script": "download_cards_lorcana.py"},
-    "custom":  {"name": "Custom", "path": "/home/pi/custom_cards", "color": "#F59E0B", "download_script": None},
-}
-TCG_LIBRARIES = {k: v["path"] for k, v in TCG_REGISTRY.items()}
+TCG_LIBRARIES = get_card_libraries()
 
 # Supported image formats
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
