@@ -24,6 +24,7 @@ from inkslab_paths import (
     COLLECTION_FILE,
     COLLECTION_TRIGGER,
     CONFIG_FILE,
+    CURRENT_PREVIEW_FILE,
     DOWNLOAD_LOG,
     LIBRARY_TRIGGER,
     NEXT_TRIGGER,
@@ -489,6 +490,15 @@ def api_ip():
 
 @app.route('/api/card_image')
 def api_current_card_image():
+    """Serve the latest rendered screen preview for the display page."""
+    if os.path.exists(CURRENT_PREVIEW_FILE):
+        try:
+            resp = make_response(send_file(CURRENT_PREVIEW_FILE, mimetype='image/png'))
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return resp
+        except Exception:
+            pass
+
     """Serve the current card image from the display status."""
     allowed_dirs = list(TCG_LIBRARIES.values())
     if os.path.exists(STATUS_FILE):
@@ -3002,15 +3012,18 @@ function refreshStatus() {
       document.getElementById('st-rarity').textContent = d.rarity || '\\u2014';
       document.getElementById('st-total').textContent = d.total_cards || '\\u2014';
       var img = document.getElementById('st-preview');
-      if (d.card_path && !nonCardPlugin) {
-        var needsReload = (d.card_path !== _lastStatus.card_path
+      var needsReload = false;
+      if (nonCardPlugin) {
+        needsReload = (d.tcg !== _lastStatus.tcg
+          || d.display_updating !== _lastStatus.display_updating
+          || (_lastStatus.pending && !d.pending));
+      } else if (d.card_path) {
+        needsReload = (d.card_path !== _lastStatus.card_path
           || d.tcg !== _lastStatus.tcg
           || (_lastStatus.pending && !d.pending));
-        if (needsReload) {
-          img.src = '/api/card_image?t=' + Date.now();
-        }
-      } else {
-        img.style.display = 'none';
+      }
+      if (needsReload) {
+        img.src = '/api/card_image?t=' + Date.now();
       }
       // Show/hide loading overlay based on display state
       if (d.display_updating) {

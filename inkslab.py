@@ -27,6 +27,7 @@ from inkslab_paths import (
     COLLECTION_FILE,
     COLLECTION_TRIGGER,
     CONFIG_FILE,
+    CURRENT_PREVIEW_FILE,
     LIBRARY_TRIGGER,
     NEXT_TRIGGER,
     PAUSE_FILE,
@@ -180,6 +181,16 @@ def write_status(info):
         pass
 
 
+def save_current_preview(img):
+    """Persist the latest rendered display image for the web preview."""
+    try:
+        tmp_path = CURRENT_PREVIEW_FILE + ".tmp"
+        img.save(tmp_path, format="PNG")
+        os.replace(tmp_path, CURRENT_PREVIEW_FILE)
+    except Exception:
+        pass
+
+
 def _is_card_image(filename):
     """Check if a file is a supported card image."""
     return filename.lower().endswith(IMAGE_EXTENSIONS) and not filename.startswith('_')
@@ -320,6 +331,7 @@ def show_splash_screen(epd, config):
         img_rgb.close()
 
         epd.init()
+        save_current_preview(final)
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -401,6 +413,7 @@ def show_setup_screen(epd, config):
         img_rgb.close()
 
         epd.init()
+        save_current_preview(final)
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -476,6 +489,7 @@ def show_wifi_failed_screen(epd, config, ssid=""):
         img_rgb.close()
 
         epd.init()
+        save_current_preview(final)
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -570,6 +584,7 @@ def show_no_cards_screen(epd, config, ip=None):
         img_rgb.close()
 
         epd.init()
+        save_current_preview(final)
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -627,6 +642,7 @@ def show_unbox_screen(epd, config):
         img_rgb.close()
 
         epd.init()
+        save_current_preview(final)
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -1437,6 +1453,7 @@ def main():
                 write_status(status_info)
 
                 try:
+                    save_current_preview(final_img)
                     epd.init()
                     epd.display(epd.getbuffer(final_img))
                 except Exception as e:
@@ -1661,6 +1678,7 @@ def main():
                 write_status(status_info)
 
                 try:
+                    save_current_preview(final_img)
                     epd.init()
                     epd.display(epd.getbuffer(final_img))
                 except Exception as e:

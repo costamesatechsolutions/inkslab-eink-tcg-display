@@ -105,6 +105,16 @@ def _format_temp(value):
         return "--"
 
 
+def _format_clock(value):
+    if not value:
+        return "--"
+    try:
+        parsed = time.strptime(value, "%Y-%m-%dT%H:%M")
+        return time.strftime("%-I:%M %p", parsed)
+    except Exception:
+        return value[-5:]
+
+
 def fetch_weather_snapshot(config):
     settings = get_weather_settings(config)
     location_name = settings["location_name"]
@@ -145,7 +155,8 @@ def fetch_weather_snapshot(config):
             "latitude": result["latitude"],
             "longitude": result["longitude"],
             "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day",
-            "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+            "hourly": "temperature_2m,weather_code,precipitation_probability",
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max",
             "forecast_days": 1,
             "temperature_unit": "fahrenheit" if units == "imperial" else "celsius",
             "wind_speed_unit": "mph" if units == "imperial" else "kmh",
@@ -154,6 +165,27 @@ def fetch_weather_snapshot(config):
         forecast = _read_json_url("https://api.open-meteo.com/v1/forecast?" + forecast_query)
         current = forecast.get("current", {}) if isinstance(forecast, dict) else {}
         daily = forecast.get("daily", {}) if isinstance(forecast, dict) else {}
+        hourly = forecast.get("hourly", {}) if isinstance(forecast, dict) else {}
+        next_periods = []
+        hourly_times = hourly.get("time") or []
+        hourly_temps = hourly.get("temperature_2m") or []
+        hourly_codes = hourly.get("weather_code") or []
+        hourly_precip = hourly.get("precipitation_probability") or []
+        current_time = current.get("time")
+        start_index = 0
+        if current_time and current_time in hourly_times:
+            start_index = hourly_times.index(current_time) + 1
+        for offset in (0, 2, 5):
+            idx = start_index + offset
+            if idx >= len(hourly_times):
+                continue
+            next_periods.append({
+                "time": _format_clock(hourly_times[idx]),
+                "temperature": hourly_temps[idx] if idx < len(hourly_temps) else None,
+                "weather_code": hourly_codes[idx] if idx < len(hourly_codes) else None,
+                "condition": _weather_code_label(hourly_codes[idx] if idx < len(hourly_codes) else None),
+                "precipitation_probability": hourly_precip[idx] if idx < len(hourly_precip) else None,
+            })
 
         snapshot = {
             "ok": True,
@@ -170,6 +202,11 @@ def fetch_weather_snapshot(config):
             "high": (daily.get("temperature_2m_max") or [None])[0],
             "low": (daily.get("temperature_2m_min") or [None])[0],
             "today_code": (daily.get("weather_code") or [current.get("weather_code")])[0],
+            "sunrise": (daily.get("sunrise") or [None])[0],
+            "sunset": (daily.get("sunset") or [None])[0],
+            "uv_index_max": (daily.get("uv_index_max") or [None])[0],
+            "precipitation_probability_max": (daily.get("precipitation_probability_max") or [None])[0],
+            "next_periods": next_periods,
             "updated_at": int(time.time()),
         }
     except Exception:
@@ -214,12 +251,24 @@ def _draw_cloud(draw, center_x, center_y, fill=(255, 255, 255), outline=(0, 0, 2
     draw.rounded_rectangle((center_x - 86, center_y, center_x + 92, center_y + 38), radius=18, fill=fill, outline=outline, width=4)
 
 
+def _draw_moon(draw, center_x, center_y):
+    draw.ellipse((center_x - 46, center_y - 46, center_x + 46, center_y + 46), fill=(255, 255, 255), outline=(0, 0, 255), width=4)
+    draw.ellipse((center_x - 20, center_y - 52, center_x + 58, center_y + 28), fill=(255, 255, 255), outline=(255, 255, 255), width=0)
+    draw.ellipse((center_x - 8, center_y - 40, center_x + 46, center_y + 16), fill=(0, 0, 255), outline=(0, 0, 255), width=0)
+
+
 def _draw_weather_icon(draw, code, is_day):
     if code == 0 and is_day:
         _draw_sun(draw, 298, 144)
         return
+    if code == 0 and not is_day:
+        _draw_moon(draw, 298, 144)
+        return
     if code in (1, 2):
-        _draw_sun(draw, 278, 126)
+        if is_day:
+            _draw_sun(draw, 278, 126)
+        else:
+            _draw_moon(draw, 278, 126)
         _draw_cloud(draw, 302, 152)
         return
     if code in (61, 63, 65, 66, 67, 80, 81, 82):
@@ -235,30 +284,57 @@ def _draw_weather_icon(draw, code, is_day):
     _draw_cloud(draw, 298, 144)
 
 
+def _wrap_text(draw, text, font, max_width):
+    words = str(text or "").split()
+    lines = []
+    current = ""
+    for word in words:
+        trial = (current + " " + word).strip()
+        if draw.textbbox((0, 0), trial, font=font)[2] <= max_width or not current:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines[:2]
+
+
+def _draw_metric_box(draw, left, top, width, height, title, value, accent=(0, 0, 255)):
+    draw.rounded_rectangle((left, top, left + width, top + height), radius=16, outline=accent, width=3, fill=(252, 253, 240))
+    draw.text((left + 14, top + 12), title, fill=(0, 0, 0), font=_load_font(15))
+    draw.text((left + 14, top + 40), value, fill=(0, 0, 0), font=_load_font(22, bold=True))
+
+
 def render_weather_canvas(config):
     snapshot = fetch_weather_snapshot(config)
     canvas = Image.new("RGB", (400, 600), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    font_title = _load_font(34, bold=True)
-    font_large = _load_font(76, bold=True)
-    font_body = _load_font(24)
-    font_body_bold = _load_font(24, bold=True)
-    font_small = _load_font(16)
+    font_title = _load_font(24, bold=True)
+    font_location = _load_font(22, bold=True)
+    font_large = _load_font(84, bold=True)
+    font_body = _load_font(22)
+    font_body_bold = _load_font(22, bold=True)
+    font_small = _load_font(15)
 
-    draw.rectangle((0, 0, 400, 86), fill=(0, 0, 255))
-    draw.text((26, 26), "Weather", fill=(255, 255, 255), font=font_title)
-    draw.text((26, 58), snapshot.get("location_label", "Weather"), fill=(255, 255, 255), font=font_small)
+    draw.rectangle((0, 0, 400, 96), fill=(0, 0, 255))
+    draw.text((22, 16), "Weather", fill=(255, 255, 255), font=font_title)
+    location_lines = _wrap_text(draw, snapshot.get("location_label", "Weather"), font_location, 280)
+    for idx, line in enumerate(location_lines):
+        draw.text((22, 46 + (idx * 24)), line, fill=(255, 255, 255), font=font_location)
 
     if not snapshot.get("ok"):
-        draw.rounded_rectangle((22, 112, 378, 522), radius=18, outline=(0, 0, 255), width=3, fill=(255, 255, 255))
+        draw.rounded_rectangle((22, 120, 378, 520), radius=18, outline=(0, 0, 255), width=3, fill=(255, 255, 255))
         draw.text((200, 190), "Weather Setup", fill=(0, 0, 0), font=font_title, anchor="mm")
-        draw.text((200, 276), snapshot.get("reason", "Weather is not ready yet."), fill=(0, 0, 0), font=font_body, anchor="mm")
+        reason_lines = _wrap_text(draw, snapshot.get("reason", "Weather is not ready yet."), font_body, 300)
+        for idx, line in enumerate(reason_lines):
+            draw.text((200, 258 + (idx * 28)), line, fill=(0, 0, 0), font=font_body, anchor="mm")
         draw.text((200, 384), "Enable the Weather plugin and add a city name.", fill=(255, 128, 0), font=font_body_bold, anchor="mm")
         draw.text((200, 474), "Example: Costa Mesa, CA", fill=(0, 0, 255), font=font_small, anchor="mm")
         return canvas, snapshot
 
-    _draw_weather_icon(draw, snapshot.get("today_code"), snapshot.get("is_day"))
+    _draw_weather_icon(draw, snapshot.get("weather_code"), snapshot.get("is_day"))
 
     units_suffix = "F" if snapshot.get("weather_units") == "imperial" else "C"
     wind_suffix = "mph" if snapshot.get("weather_units") == "imperial" else "km/h"
@@ -268,21 +344,35 @@ def render_weather_canvas(config):
     low = _format_temp(snapshot.get("low"))
     wind_speed = _format_temp(snapshot.get("wind_speed"))
 
-    draw.text((72, 150), temperature, fill=(0, 0, 0), font=font_large)
-    draw.text((175, 164), units_suffix, fill=(255, 128, 0), font=font_body_bold)
-    draw.text((76, 235), snapshot.get("condition_label", "Weather"), fill=(0, 0, 255), font=font_body_bold)
+    draw.text((22, 150), temperature, fill=(0, 0, 0), font=font_large)
+    draw.text((145, 170), units_suffix, fill=(255, 128, 0), font=font_body_bold)
+    draw.text((24, 238), snapshot.get("condition_label", "Weather"), fill=(0, 0, 255), font=font_body_bold)
 
-    draw.rounded_rectangle((22, 300, 378, 430), radius=16, outline=(0, 0, 255), width=3, fill=(252, 253, 240))
-    draw.text((48, 326), "High / Low", fill=(0, 0, 0), font=font_small)
-    draw.text((48, 356), high + " / " + low + " " + units_suffix, fill=(0, 0, 0), font=font_body_bold)
-    draw.text((232, 326), "Feels Like", fill=(0, 0, 0), font=font_small)
-    draw.text((232, 356), apparent + " " + units_suffix, fill=(0, 0, 0), font=font_body_bold)
+    _draw_metric_box(draw, 20, 290, 172, 92, "High / Low", high + " / " + low + " " + units_suffix)
+    _draw_metric_box(draw, 208, 290, 172, 92, "Feels Like", apparent + " " + units_suffix)
+    _draw_metric_box(draw, 20, 392, 172, 92, "Wind", wind_speed + " " + wind_suffix, accent=(255, 128, 0))
+    precip_text = (_format_temp(snapshot.get("precipitation_probability_max")) + "%")
+    _draw_metric_box(draw, 208, 392, 172, 92, "Rain Chance", precip_text, accent=(0, 255, 0))
 
-    draw.rounded_rectangle((22, 452, 378, 522), radius=16, outline=(255, 128, 0), width=3, fill=(255, 255, 255))
-    draw.text((48, 475), "Wind", fill=(0, 0, 0), font=font_small)
-    draw.text((48, 498), wind_speed + " " + wind_suffix, fill=(0, 0, 0), font=font_body_bold)
+    sunrise = _format_clock(snapshot.get("sunrise"))
+    sunset = _format_clock(snapshot.get("sunset"))
+    uv = _format_temp(snapshot.get("uv_index_max"))
+    draw.text((24, 510), "Sunrise " + sunrise, fill=(0, 0, 0), font=font_small)
+    draw.text((210, 510), "Sunset " + sunset, fill=(0, 0, 0), font=font_small)
+    draw.text((24, 534), "UV Max " + uv, fill=(0, 0, 0), font=font_small)
+
+    next_periods = snapshot.get("next_periods") or []
+    if next_periods:
+        draw.text((210, 534), "Next Up", fill=(0, 0, 255), font=font_small)
+        x = 208
+        for period in next_periods[:2]:
+            label = period.get("time", "--")
+            temp_label = _format_temp(period.get("temperature")) + " " + units_suffix
+            draw.text((x, 556), label, fill=(0, 0, 0), font=font_small)
+            draw.text((x + 68, 556), temp_label, fill=(0, 0, 0), font=font_small, anchor="ra")
+            x += 82
 
     updated_struct = time.localtime(snapshot.get("updated_at", int(time.time())))
-    draw.text((24, 566), "Updated " + time.strftime("%-I:%M %p", updated_struct), fill=(0, 0, 0), font=font_small)
-    draw.text((376, 566), "Open-Meteo", fill=(0, 0, 255), font=font_small, anchor="ra")
+    draw.text((24, 582), "Updated " + time.strftime("%-I:%M %p", updated_struct), fill=(0, 0, 0), font=font_small)
+    draw.text((376, 582), "Open-Meteo", fill=(0, 0, 255), font=font_small, anchor="ra")
     return canvas, snapshot
