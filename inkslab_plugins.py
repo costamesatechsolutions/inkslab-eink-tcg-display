@@ -181,12 +181,23 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         name="Reminders",
         kind="reminders",
         accent_color="#F6BD60",
-        description="A compact to-do and reminders module for a few key tasks.",
+        description="A compact local to-do board for a few key tasks, with no account setup required.",
         builtin=True,
-        runtime_enabled=False,
-        settings_keys=["reminders_source", "reminders_refresh_minutes"],
+        runtime_enabled=True,
+        settings_keys=["reminders_title", "reminders_items", "reminders_demo_mode", "reminders_refresh_minutes"],
         config_schema=[
-            {"key": "reminders_source", "label": "Reminders Source", "type": "text"},
+            {"key": "reminders_title", "label": "Board Title", "type": "text", "default": "Today's Focus"},
+            {"key": "reminders_items", "label": "Reminder Lines", "type": "textarea", "default": ""},
+            {
+                "key": "reminders_demo_mode",
+                "label": "Demo Mode",
+                "type": "select",
+                "default": "on",
+                "options": [
+                    {"value": "on", "label": "On"},
+                    {"value": "off", "label": "Off"},
+                ],
+            },
             {"key": "reminders_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
         ],
     ),
@@ -374,6 +385,8 @@ def normalize_plugin_settings(plugin_settings) -> Dict[str, Dict[str, object]]:
                     bucket[key] = max(1, min(1440, int(value)))
                 except (TypeError, ValueError):
                     continue
+            elif field_type == "textarea":
+                bucket[key] = str(value).replace("\r\n", "\n").replace("\r", "\n").strip()[:2000]
             else:
                 bucket[key] = str(value).strip()[:240]
     return normalized

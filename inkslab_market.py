@@ -203,7 +203,7 @@ def fetch_market_snapshot(config):
         cached["reason"] = "Showing cached market data because live Yahoo Finance refresh failed."
         return cached
     fallback = _demo_snapshot(settings)
-    fallback["reason"] = error or "Falling back to demo values because live Yahoo Finance quotes failed."
+    fallback["reason"] = error or "Live Yahoo Finance quotes were unavailable, so demo values are showing for now."
     return fallback
 
 

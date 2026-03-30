@@ -1377,7 +1377,9 @@ def main():
     try:
         while not _shutdown:
             if active_tcg not in TCG_LIBRARIES:
-                if active_tcg not in ("weather", "news", "calendar", "market"):
+                logger.info("Displaying: %s", active_tcg)
+                plugin_canvas, plugin_payload = render_runtime_plugin(active_tcg, config)
+                if not plugin_canvas or not plugin_payload:
                     write_status({
                         "card_path": "",
                         "set_name": "Plugin Not Ready",
@@ -1389,15 +1391,6 @@ def main():
                         "total_cards": 0,
                         "error": "This plugin is listed in the dashboard but does not have a live renderer yet.",
                     })
-                    config, _ = wait_with_polling(60)
-                    active_tcg = config["active_tcg"]
-                    if active_tcg in TCG_LIBRARIES:
-                        rebuild_deck()
-                    continue
-
-                logger.info("Displaying: %s", active_tcg)
-                plugin_canvas, plugin_payload = render_runtime_plugin(active_tcg, config)
-                if not plugin_canvas or not plugin_payload:
                     config, _ = wait_with_polling(60)
                     active_tcg = config["active_tcg"]
                     if active_tcg in TCG_LIBRARIES:

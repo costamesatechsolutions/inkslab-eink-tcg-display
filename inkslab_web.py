@@ -2476,7 +2476,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-savebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 12px; padding: 10px 12px; border-radius: 8px; background: #132E3E; border: 1px solid #36A5CA33; }
 .plugin-savebar-note { font-size: 11px; color: #8899a6; line-height: 1.4; }
 .plugin-settings-row label { display: block; color: #6BCCBD; font-size: 11px; margin-bottom: 4px; }
-.plugin-settings-row input, .plugin-settings-row select { width: 100%; }
+.plugin-settings-row input, .plugin-settings-row select, .plugin-settings-row textarea { width: 100%; }
+.plugin-settings-row textarea { min-height: 96px; resize: vertical; }
 .context-note { font-size: 12px; color: #6BCCBD; margin: 6px 0 10px; line-height: 1.45; }
 .subtle-note { font-size: 11px; color: #8899a6; margin-top: 6px; line-height: 1.4; }
 .schedule-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
@@ -3342,6 +3343,8 @@ function loadPlugins() {
                 return '<option value="' + esc(value) + '"' + (String(fieldValue) === value ? ' selected' : '') + '>' + esc(label) + '</option>';
               }).join('') +
             '</select>';
+          } else if (field.type === 'textarea') {
+            inputHtml = '<textarea data-plugin-setting="' + id + '" data-setting-key="' + esc(fieldKey) + '" id="' + esc(fieldId) + '" rows="4">' + esc(fieldValue) + '</textarea>';
           } else {
             var inputType = field.type === 'number' ? 'number' : 'text';
             inputHtml = '<input type="' + inputType + '" data-plugin-setting="' + id + '" data-setting-key="' + esc(fieldKey) + '" id="' + esc(fieldId) + '" value="' + esc(fieldValue) + '">';
