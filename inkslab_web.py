@@ -2437,6 +2437,12 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
 .plugin-checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #D8E6E4; }
 .pill-note { display: inline-flex; align-items: center; gap: 6px; background: #1F333F; border: 1px solid #36A5CA44; color: #D8E6E4; border-radius: 999px; padding: 4px 10px; font-size: 11px; margin-top: 8px; }
+.subtabs { display: flex; gap: 8px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
+.subtab { border: 1px solid #36A5CA33; background: #132E3E; color: #6BCCBD; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.subtab.active { background: #36A5CA; color: #FCFDF0; border-color: #36A5CA; }
+.settings-section { display: none; }
+.settings-section.active { display: block; }
+.section-intro { margin-bottom: 12px; }
 </style>
 </head>
 <body>
@@ -2502,127 +2508,156 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 
 <!-- SETTINGS TAB -->
 <div id="tab-settings" class="panel">
-  <div class="card">
-    <h3>Core Display</h3>
-    <p class="context-note">These are the shared device settings that apply to the whole dashboard, no matter which plugins you enable.</p>
-    <div class="form-group" id="default-tcg-group">
-      <label>Default TCG Plugin</label>
-      <select id="cfg-tcg"></select>
-      <div class="subtle-note">Legacy compatibility control for the current card renderer. If you only use weather, traffic, or other ambient plugins later, you can ignore this.</div>
+  <div class="subtabs">
+    <button class="subtab active" id="settings-subtab-overview" onclick="showSettingsSection('overview')">Overview</button>
+    <button class="subtab" id="settings-subtab-plugins" onclick="showSettingsSection('plugins')">Plugins</button>
+    <button class="subtab" id="settings-subtab-device" onclick="showSettingsSection('device')">Device</button>
+  </div>
+
+  <div class="settings-section active" id="settings-section-overview">
+    <div class="card section-intro">
+      <h3>Dashboard Overview</h3>
+      <p class="context-note">This section controls the overall display behavior: how the screen rotates, which plugin is the default fallback, and the shared timing and appearance settings for the device.</p>
+      <div class="pill-note">Start here for most setup changes</div>
     </div>
-    <div class="form-group">
-      <label>Slab Header</label>
-      <select id="cfg-header-mode">
-        <option value="normal">Normal (white bg, black text)</option>
-        <option value="inverted">Inverted (black bg, white text)</option>
-        <option value="off">Off (full-screen card art)</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>Rotation Angle</label>
-      <select id="cfg-rotation"><option value="270">Default</option><option value="90">Upside Down</option></select>
-    </div>
-    <div class="form-group">
-      <label>Day Interval (minutes)</label>
-      <input type="number" id="cfg-day-interval" min="1" max="120" value="10">
-    </div>
-    <div class="form-group">
-      <label>Night Interval (minutes)</label>
-      <input type="number" id="cfg-night-interval" min="1" max="480" value="60">
-    </div>
-    <div class="form-group">
-      <label>Timezone</label>
-      <div style="background:#1F333F;border-radius:4px;padding:6px 10px;margin-bottom:6px;font-size:12px;color:#6BCCBD">
-        Pi thinks it is: <span id="pi-time" style="font-weight:600;color:#D8E6E4">--:-- --</span>
-        <span id="tz-hint" style="color:#8899a6;margin-left:6px"></span>
+    <div class="card">
+      <h3>Core Display</h3>
+      <p class="context-note">These are the shared device settings that apply to the whole dashboard, no matter which plugins you enable.</p>
+      <div class="form-group" id="default-tcg-group">
+        <label>Default TCG Plugin</label>
+        <select id="cfg-tcg"></select>
+        <div class="subtle-note">Legacy compatibility control for the current card renderer. If you only use weather, traffic, or other ambient plugins later, you can ignore this.</div>
       </div>
-      <div class="flex-row" style="gap:8px;align-items:center">
-        <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="Leave blank to use Pi system time" style="flex:2">
-        <button class="btn btn-secondary btn-sm" onclick="autoDetectTimezone()" style="flex:1;white-space:nowrap">Auto-Detect</button>
+      <div class="form-group">
+        <label>Slab Header</label>
+        <select id="cfg-header-mode">
+          <option value="normal">Normal (white bg, black text)</option>
+          <option value="inverted">Inverted (black bg, white text)</option>
+          <option value="off">Off (full-screen card art)</option>
+        </select>
       </div>
-      <input type="hidden" id="cfg-tz-name" value="">
-      <small style="color:#6BCCBD;font-size:11px">Auto-detected from your phone. Handles daylight saving automatically. You shouldn't need to change this.</small>
-    </div>
-    <div class="form-group">
-      <label>Day Start (hour, 24h)</label>
-      <input type="number" id="cfg-day-start" min="0" max="23" value="7">
-    </div>
-    <div class="form-group">
-      <label>Day End (hour, 24h)</label>
-      <input type="number" id="cfg-day-end" min="0" max="23" value="23">
-    </div>
-    <div class="form-group">
-      <label>Color Saturation</label>
-      <input type="number" id="cfg-saturation" min="0.5" max="5.0" step="0.1" value="2.5">
-    </div>
-    <div class="form-group">
-      <div class="toggle">
-        <input type="checkbox" id="cfg-collection">
-        <label for="cfg-collection">TCG-only: show only My Cards</label>
+      <div class="form-group">
+        <label>Rotation Angle</label>
+        <select id="cfg-rotation"><option value="270">Default</option><option value="90">Upside Down</option></select>
       </div>
-      <div class="subtle-note">Only affects card plugins. Ambient plugins like weather or traffic ignore this.</div>
+      <div class="form-group">
+        <label>Day Interval (minutes)</label>
+        <input type="number" id="cfg-day-interval" min="1" max="120" value="10">
+      </div>
+      <div class="form-group">
+        <label>Night Interval (minutes)</label>
+        <input type="number" id="cfg-night-interval" min="1" max="480" value="60">
+      </div>
+      <div class="form-group">
+        <label>Timezone</label>
+        <div style="background:#1F333F;border-radius:4px;padding:6px 10px;margin-bottom:6px;font-size:12px;color:#6BCCBD">
+          Pi thinks it is: <span id="pi-time" style="font-weight:600;color:#D8E6E4">--:-- --</span>
+          <span id="tz-hint" style="color:#8899a6;margin-left:6px"></span>
+        </div>
+        <div class="flex-row" style="gap:8px;align-items:center">
+          <input type="number" id="cfg-tz-offset" min="-12" max="14" step="1" placeholder="Leave blank to use Pi system time" style="flex:2">
+          <button class="btn btn-secondary btn-sm" onclick="autoDetectTimezone()" style="flex:1;white-space:nowrap">Auto-Detect</button>
+        </div>
+        <input type="hidden" id="cfg-tz-name" value="">
+        <small style="color:#6BCCBD;font-size:11px">Auto-detected from your phone. Handles daylight saving automatically. You shouldn't need to change this.</small>
+      </div>
+      <div class="form-group">
+        <label>Day Start (hour, 24h)</label>
+        <input type="number" id="cfg-day-start" min="0" max="23" value="7">
+      </div>
+      <div class="form-group">
+        <label>Day End (hour, 24h)</label>
+        <input type="number" id="cfg-day-end" min="0" max="23" value="23">
+      </div>
+      <div class="form-group">
+        <label>Color Saturation</label>
+        <input type="number" id="cfg-saturation" min="0.5" max="5.0" step="0.1" value="2.5">
+      </div>
+      <div class="form-group">
+        <div class="toggle">
+          <input type="checkbox" id="cfg-collection">
+          <label for="cfg-collection">TCG-only: show only My Cards</label>
+        </div>
+        <div class="subtle-note">Only affects card plugins. Ambient plugins like weather or traffic ignore this.</div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
+    <div class="card">
+      <h3>Display Plan</h3>
+      <p class="context-note">Choose whether the screen stays on one plugin or rotates through a calm schedule like cards, weather, and news.</p>
+      <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
+      <div id="display-plan-list" class="schedule-list"></div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Display Mode</label>
+        <select id="display-mode">
+          <option value="single">Single Plugin</option>
+          <option value="schedule">Scheduled Rotation</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Single Plugin</label>
+        <select id="single-plugin"></select>
+      </div>
+      <div class="flex-row" style="margin-bottom:8px">
+        <button class="btn btn-secondary btn-block" onclick="addDisplayPlanBlock()">Add Time Block</button>
+        <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
+      </div>
+      <div id="display-plan-editor" class="schedule-editor"></div>
+      <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">The scheduler already understands rotation. As more plugins become runnable, this is where the dashboard starts feeling truly modular.</p>
+    </div>
   </div>
-  <div class="card">
-    <h3>Plugin Manager</h3>
-    <p class="context-note">Enable only the plugins this device should actually use. A weather-only or traffic-only build should feel just as natural here as a TCG build.</p>
-    <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
-    <div id="plugin-list" class="plugin-list"></div>
-    <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Plugin Selection</button>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Built-in roadmap plugins already appear here so the architecture stays honest while we turn them into real modules.</p>
+
+  <div class="settings-section" id="settings-section-plugins">
+    <div class="card section-intro">
+      <h3>Plugin Controls</h3>
+      <p class="context-note">Enable the modules you want this device to use, then fill in the settings that belong only to those plugins. This keeps the rest of the dashboard cleaner.</p>
+      <div class="pill-note">Each plugin keeps its own settings</div>
+    </div>
+    <div class="card">
+      <h3>Plugin Manager</h3>
+      <p class="context-note">Enable only the plugins this device should actually use. A weather-only or traffic-only build should feel just as natural here as a TCG build.</p>
+      <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
+      <div id="plugin-list" class="plugin-list"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Plugin Selection</button>
+      <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Built-in roadmap plugins already appear here so the architecture stays honest while we turn them into real modules.</p>
+    </div>
   </div>
-  <div class="card">
-    <h3>Display Plan</h3>
-    <p class="context-note">Choose whether the screen stays on one plugin or rotates through a calm schedule like cards, weather, and news.</p>
-    <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
-    <div id="display-plan-list" class="schedule-list"></div>
-    <div class="form-group" style="margin-top:12px">
-      <label>Display Mode</label>
-      <select id="display-mode">
-        <option value="single">Single Plugin</option>
-        <option value="schedule">Scheduled Rotation</option>
-      </select>
+
+  <div class="settings-section" id="settings-section-device">
+    <div class="card section-intro">
+      <h3>Device Maintenance</h3>
+      <p class="context-note">Use this section for software updates, WiFi changes, and one-time admin tasks. This keeps low-frequency device actions out of the main dashboard setup flow.</p>
+      <div class="pill-note">Mostly for maintenance, not daily use</div>
     </div>
-    <div class="form-group">
-      <label>Single Plugin</label>
-      <select id="single-plugin"></select>
+    <div class="card">
+      <h3>Software Update</h3>
+      <div id="update-info" style="margin-bottom:10px;font-size:13px;color:#6BCCBD;cursor:default;-webkit-user-select:none;user-select:none" onclick="adminTap()">Loading version...</div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>Update Branch (testing devices only)</label>
+        <select id="update-branch" onchange="saveUpdateBranch()"></select>
+        <div id="update-branch-hint" style="margin-top:6px;font-size:11px;color:#8899a6"></div>
+      </div>
+      <div class="flex-row" style="margin-bottom:8px">
+        <button class="btn btn-secondary btn-block" onclick="checkUpdate()">Check for Updates</button>
+        <button class="btn btn-primary btn-block" id="btn-update-now" style="display:none" onclick="startUpdate()">Update Now</button>
+      </div>
+      <div id="update-progress" style="display:none">
+        <div style="background:#1F333F;border-radius:4px;height:8px;margin:8px 0"><div id="update-bar" style="height:100%;border-radius:4px;background:#36A5CA;width:0%;transition:width 0.5s"></div></div>
+        <div id="update-stage" style="font-size:12px;color:#6BCCBD;text-align:center"></div>
+      </div>
+      <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
     </div>
-    <div class="flex-row" style="margin-bottom:8px">
-      <button class="btn btn-secondary btn-block" onclick="addDisplayPlanBlock()">Add Time Block</button>
-      <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
+    <div class="card">
+      <h3>WiFi Network</h3>
+      <div id="wifi-info" style="font-size:13px;color:#6BCCBD;margin-bottom:10px">Checking WiFi...</div>
+      <button class="btn btn-secondary btn-block" onclick="changeWifi()">Change WiFi Network</button>
+      <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
     </div>
-    <div id="display-plan-editor" class="schedule-editor"></div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">The scheduler already understands rotation. As more plugins become runnable, this is where the dashboard starts feeling truly modular.</p>
-  </div>
-  <div class="card">
-    <h3>Software Update</h3>
-    <div id="update-info" style="margin-bottom:10px;font-size:13px;color:#6BCCBD;cursor:default;-webkit-user-select:none;user-select:none" onclick="adminTap()">Loading version...</div>
-    <div class="form-group" style="margin-bottom:8px">
-      <label>Update Branch (testing devices only)</label>
-      <select id="update-branch" onchange="saveUpdateBranch()"></select>
-      <div id="update-branch-hint" style="margin-top:6px;font-size:11px;color:#8899a6"></div>
+    <div class="card" id="admin-panel" style="display:none;border:1px solid #ff6b6b33">
+      <h3 style="color:#ff6b6b">Prepare for New Owner</h3>
+      <p style="color:#6BCCBD;font-size:12px;margin-bottom:10px">Wipes everything (WiFi, cards, settings) and shows a welcome screen on the display. After it finishes, unplug the unit — it's ready to ship.</p>
+      <button class="btn btn-block" style="background:#ff6b6b;color:#010001;font-weight:600" onclick="factoryReset(this)">Prepare for New Owner</button>
     </div>
-    <div class="flex-row" style="margin-bottom:8px">
-      <button class="btn btn-secondary btn-block" onclick="checkUpdate()">Check for Updates</button>
-      <button class="btn btn-primary btn-block" id="btn-update-now" style="display:none" onclick="startUpdate()">Update Now</button>
-    </div>
-    <div id="update-progress" style="display:none">
-      <div style="background:#1F333F;border-radius:4px;height:8px;margin:8px 0"><div id="update-bar" style="height:100%;border-radius:4px;background:#36A5CA;width:0%;transition:width 0.5s"></div></div>
-      <div id="update-stage" style="font-size:12px;color:#6BCCBD;text-align:center"></div>
-    </div>
-    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
-  </div>
-  <div class="card">
-    <h3>WiFi Network</h3>
-    <div id="wifi-info" style="font-size:13px;color:#6BCCBD;margin-bottom:10px">Checking WiFi...</div>
-    <button class="btn btn-secondary btn-block" onclick="changeWifi()">Change WiFi Network</button>
-    <p style="font-size:11px;color:#8899a6;margin-top:8px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
-  </div>
-  <div class="card" id="admin-panel" style="display:none;border:1px solid #ff6b6b33">
-    <h3 style="color:#ff6b6b">Prepare for New Owner</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:10px">Wipes everything (WiFi, cards, settings) and shows a welcome screen on the display. After it finishes, unplug the unit — it's ready to ship.</p>
-    <button class="btn btn-block" style="background:#ff6b6b;color:#010001;font-weight:600" onclick="factoryReset(this)">Prepare for New Owner</button>
   </div>
 </div>
 
@@ -2755,9 +2790,24 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   if (name === 'collection') { loadSets(); loadRarities(); loadFavorites(); }
-  if (name === 'settings') { loadSettings(); loadWifiInfo(); }
+  if (name === 'settings') {
+    loadSettings();
+    loadWifiInfo();
+    showSettingsSection(localStorage.getItem('inkslab_settings_section') || 'overview');
+  }
   if (name === 'downloads') { loadStorage(); pollDownload(); loadCustomFolders(); }
   if (name === 'display') refreshStatus();
+}
+
+function showSettingsSection(name) {
+  var section = name || 'overview';
+  localStorage.setItem('inkslab_settings_section', section);
+  document.querySelectorAll('.subtab').forEach(function(tab) {
+    tab.classList.toggle('active', tab.id === 'settings-subtab-' + section);
+  });
+  document.querySelectorAll('.settings-section').forEach(function(panel) {
+    panel.classList.toggle('active', panel.id === 'settings-section-' + section);
+  });
 }
 
 // --- Toast ---
