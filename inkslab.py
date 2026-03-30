@@ -1254,14 +1254,14 @@ def main():
         # If no cards, skip splash (no-cards screen shows the IP too, avoids extra flash).
         if deck.total > 0:
             had_ip = show_splash_screen(epd, config)
-            logger.info(f"Splash screen sent — waiting {EINK_RENDER_WAIT}s for e-ink render...")
-            time.sleep(EINK_RENDER_WAIT)
+            logger.info(f"Splash screen sent — waiting up to {EINK_RENDER_WAIT}s for e-ink render...")
+            config, _ = wait_with_polling(EINK_RENDER_WAIT, config_check_interval=1)
             # If the first splash rendered without an IP (slow DHCP on first boot),
             # try once more — the IP should be available by now after the render wait.
             if not had_ip and get_local_ip():
                 logger.info("Re-showing splash — IP now available after render wait")
                 show_splash_screen(epd, config)
-                time.sleep(EINK_RENDER_WAIT)
+                config, _ = wait_with_polling(EINK_RENDER_WAIT, config_check_interval=1)
         else:
             logger.info("WiFi connected but no cards — skipping splash, will show no-cards screen")
     else:
@@ -1293,9 +1293,23 @@ def main():
         if deck.total > 0:
             logger.info("WiFi wait complete, showing splash screen...")
             show_splash_screen(epd, config)
-            time.sleep(EINK_RENDER_WAIT)
+            config, _ = wait_with_polling(EINK_RENDER_WAIT, config_check_interval=1)
         else:
             logger.info("WiFi connected but no cards — skipping splash")
+
+    # Re-read the latest config after startup screens so any branch/UI actions
+    # made during boot are applied before the first real card loop begins.
+    config = load_config()
+    active_tcg = config["active_tcg"]
+    library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+    master_index = load_master_index(library_dir)
+    if config["collection_only"]:
+        loaded = load_collection(active_tcg)
+        collection = loaded if loaded else set()
+    else:
+        collection = None
+    deck = ShuffleDeck(library_dir, collection)
+    _deck_collection_only = config["collection_only"]
 
     def rebuild_deck(preserve_history=False):
         """Helper to rebuild the deck when TCG, collection mode, or collection content changes."""
