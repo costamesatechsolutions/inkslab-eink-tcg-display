@@ -21,11 +21,13 @@ import threading
 from flask import Flask, request, jsonify, send_file, redirect, make_response
 import wifi_manager
 from inkslab_plugins import (
+    default_enabled_plugins,
     default_display_schedule,
     get_card_libraries,
     get_plugin_payload,
     get_plugins,
     normalize_display_config,
+    normalize_enabled_plugins,
     normalize_active_plugin,
 )
 
@@ -60,6 +62,7 @@ IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
 DEFAULTS = {
     "active_tcg": "pokemon",
+    "enabled_plugins": default_enabled_plugins("pokemon"),
     "single_plugin": "pokemon",
     "display_mode": "single",
     "display_schedule": default_display_schedule("pokemon"),
@@ -572,10 +575,37 @@ def api_plugins():
     config = load_config()
     return jsonify({
         "active_plugin": config["active_plugin"],
+        "enabled_plugins": config["enabled_plugins"],
         "display_mode": config["display_mode"],
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
         "plugins": get_plugin_payload(),
+    })
+
+
+@app.route('/api/plugins/config', methods=['POST'])
+def api_set_plugin_config():
+    """Save enabled plugin selection for the modular feature branch UI."""
+    body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid request"}), 400
+    enabled_plugins = normalize_enabled_plugins(body.get('enabled_plugins'))
+    with _config_lock:
+        config = load_config()
+        config['enabled_plugins'] = enabled_plugins
+        config = normalize_display_config(config)
+        save_config(config)
+    try:
+        with open(NEXT_TRIGGER, 'w') as f:
+            f.write('1')
+    except OSError:
+        pass
+    return jsonify({
+        "ok": True,
+        "enabled_plugins": config["enabled_plugins"],
+        "single_plugin": config["single_plugin"],
+        "display_schedule": config["display_schedule"],
+        "active_plugin": config["active_plugin"],
     })
 
 
@@ -584,6 +614,56 @@ def api_display_plan():
     """Return the experimental display planning config."""
     config = load_config()
     return jsonify({
+        "enabled_plugins": config["enabled_plugins"],
+        "display_mode": config["display_mode"],
+        "single_plugin": config["single_plugin"],
+        "display_schedule": config["display_schedule"],
+        "active_plugin": config["active_plugin"],
+        "plugins": get_plugin_payload(),
+    })
+
+
+@app.route('/api/display_plan', methods=['POST'])
+def api_set_display_plan():
+    """Save the experimental display planning config."""
+    body = request.get_json(force=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "invalid request"}), 400
+    updates = {}
+    if 'display_mode' in body:
+        updates['display_mode'] = body.get('display_mode')
+    if 'single_plugin' in body:
+        updates['single_plugin'] = body.get('single_plugin')
+        updates['active_tcg'] = body.get('single_plugin')
+    if 'display_schedule' in body:
+        updates['display_schedule'] = body.get('display_schedule')
+
+    with _config_lock:
+        config = load_config()
+        config.update(updates)
+        config = normalize_display_config(config)
+        save_config(config)
+
+    try:
+        status = {}
+        if os.path.exists(STATUS_FILE):
+            with open(STATUS_FILE, 'r') as f:
+                status = json.load(f)
+        status['pending'] = 'Updating display plan...'
+        status['timestamp'] = int(time.time())
+        status.pop('display_updating', None)
+        _write_status(status)
+    except Exception:
+        pass
+
+    try:
+        with open(NEXT_TRIGGER, 'w') as f:
+            f.write('1')
+    except OSError:
+        pass
+
+    return jsonify({
+        "ok": True,
         "display_mode": config["display_mode"],
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
@@ -2453,6 +2533,14 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .schedule-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px 12px; background: #16303E; }
 .schedule-time { font-size: 12px; color: #6BCCBD; font-weight: 600; }
 .schedule-title { font-size: 13px; color: #FCFDF0; font-weight: 600; margin-top: 2px; }
+.plugin-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.plugin-toggle { display: flex; align-items: center; gap: 6px; color: #D8E6E4; font-size: 12px; }
+.plugin-note { font-size: 11px; color: #8899a6; margin-top: 6px; }
+.schedule-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.schedule-editor-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px; background: #132E3E; }
+.schedule-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.plugin-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.plugin-checks label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #D8E6E4; }
 </style>
 </head>
 <body>
@@ -2577,12 +2665,29 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <h3>Display Plan</h3>
     <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
     <div id="display-plan-list" class="schedule-list"></div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Display Mode</label>
+      <select id="display-mode">
+        <option value="single">Single Plugin</option>
+        <option value="schedule">Scheduled Rotation</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Single Plugin</label>
+      <select id="single-plugin"></select>
+    </div>
+    <div class="flex-row" style="margin-bottom:8px">
+      <button class="btn btn-secondary btn-block" onclick="addDisplayPlanBlock()">Add Time Block</button>
+      <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
+    </div>
+    <div id="display-plan-editor" class="schedule-editor"></div>
     <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">This is the foundation for easy scheduling later. For now, playback still follows the current active plugin while we build the rest of the system safely.</p>
   </div>
   <div class="card">
     <h3>Installed Plugins</h3>
     <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
     <div id="plugin-list" class="plugin-list"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Plugin Selection</button>
     <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">This branch is preparing for installable modules. Right now these are built-in plugins using the new shared plugin system.</p>
   </div>
   <div class="card">
@@ -3109,21 +3214,38 @@ function loadPlugins() {
     var listEl = document.getElementById('plugin-list');
     if (!summaryEl || !listEl) return;
     var plugins = d.plugins || {};
+    var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
     var active = d.active_plugin || '';
     var entries = Object.entries(plugins);
-    summaryEl.textContent = entries.length + ' plugin' + (entries.length === 1 ? '' : 's') + ' installed. Active: ' + active;
+    summaryEl.textContent = enabledPlugins.length + ' runnable plugin' + (enabledPlugins.length === 1 ? '' : 's') + ' enabled. Active: ' + active;
     listEl.innerHTML = entries.map(function(entry) {
       var id = entry[0];
       var plugin = entry[1] || {};
-      var activeBadge = id === active ? '<span class="plugin-badge">Active</span>' : '<span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">Built-in</span>';
+      var isRuntime = !!plugin.runtime_enabled;
+      var isEnabled = enabledPlugins.indexOf(id) !== -1;
+      var badge = id === active
+        ? '<span class="plugin-badge">Active</span>'
+        : (isRuntime
+          ? '<span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">' + (isEnabled ? 'Enabled' : 'Disabled') + '</span>'
+          : '<span class="plugin-badge" style="background:#4B5563;color:#FCFDF0">Coming Soon</span>');
       var meta = [];
       if (plugin.kind) meta.push(plugin.kind.toUpperCase());
       if (plugin.download_script) meta.push('downloadable');
       if (plugin.settings_keys && plugin.settings_keys.length) meta.push(plugin.settings_keys.length + ' shared settings');
+      if (plugin.source === 'local-manifest') meta.push('manifest only');
+      var note = isRuntime
+        ? 'This plugin can be enabled for rotation right now.'
+        : 'This plugin is part of the modular roadmap and is not runnable yet.';
       return '<div class="plugin-item' + (id === active ? ' active' : '') + '">' +
-        '<div class="plugin-top"><div class="plugin-name">' + esc(plugin.name || id) + '</div>' + activeBadge + '</div>' +
+        '<div class="plugin-top"><div class="plugin-name">' + esc(plugin.name || id) + '</div>' + badge + '</div>' +
         '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
         '<div class="plugin-meta" style="margin-top:6px">' + esc(meta.join(' • ')) + '</div>' +
+        '<div class="plugin-controls">' +
+          (isRuntime
+            ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Enable in display plan</label>'
+            : '<div class="plugin-note">Will appear here as a real module once its renderer and data source are built.</div>') +
+        '</div>' +
+        (isRuntime ? '<div class="plugin-note">' + esc(note) + '</div>' : '') +
       '</div>';
     }).join('');
   }).catch(function() {
@@ -3132,13 +3254,59 @@ function loadPlugins() {
   });
 }
 
+function collectEnabledPlugins() {
+  return Array.from(document.querySelectorAll('[data-plugin-enabled]:checked')).map(function(el) {
+    return el.getAttribute('data-plugin-enabled');
+  });
+}
+
+function savePluginConfig() {
+  fetch(API + '/api/plugins/config', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({enabled_plugins: collectEnabledPlugins()})
+  }).then(r => r.json()).then(function(d) {
+    if (d && d.ok) {
+      showToast('Plugin selection saved');
+      loadPlugins();
+      loadDisplayPlan();
+      startRapidPoll();
+    } else {
+      showToast((d && d.error) || 'Failed to save plugin selection');
+    }
+  }).catch(function() {
+    showToast('Failed to save plugin selection');
+  });
+}
+
+var _displayPlanState = null;
+
 function loadDisplayPlan() {
   fetch(API + '/api/display_plan').then(r => r.json()).then(function(d) {
+    _displayPlanState = d;
     var summaryEl = document.getElementById('display-plan-summary');
     var listEl = document.getElementById('display-plan-list');
+    var modeEl = document.getElementById('display-mode');
+    var singleEl = document.getElementById('single-plugin');
     if (!summaryEl || !listEl) return;
     var mode = d.display_mode || 'single';
     var schedule = d.display_schedule || [];
+    var plugins = d.plugins || {};
+    var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
+    var selectablePlugins = Object.fromEntries(Object.entries(plugins).filter(function(entry) {
+      return enabledPlugins.indexOf(entry[0]) !== -1 && entry[1] && entry[1].runtime_enabled;
+    }));
+    _displayPlanState.selectable_plugins = selectablePlugins;
+    if (modeEl) modeEl.value = mode;
+    if (singleEl) {
+      singleEl.innerHTML = Object.entries(selectablePlugins).map(function(entry) {
+        return '<option value="' + entry[0] + '">' + esc((entry[1] && entry[1].name) || entry[0]) + '</option>';
+      }).join('');
+      if (!singleEl.innerHTML) {
+        singleEl.innerHTML = '<option value="pokemon">Pokemon</option>';
+      }
+      singleEl.value = d.single_plugin || d.active_plugin || 'pokemon';
+    }
     if (mode === 'schedule') {
       summaryEl.textContent = 'Schedule mode is enabled. Active right now: ' + (d.active_plugin || '-') + '.';
     } else {
@@ -3158,9 +3326,101 @@ function loadDisplayPlan() {
         '<div class="plugin-meta" style="margin-top:2px">' + esc(rotation) + '</div>' +
       '</div>';
     }).join('');
+    renderDisplayPlanEditor(schedule, selectablePlugins);
   }).catch(function() {
     var summaryEl = document.getElementById('display-plan-summary');
     if (summaryEl) summaryEl.textContent = 'Could not load display plan.';
+  });
+}
+
+function renderDisplayPlanEditor(schedule, plugins) {
+  var editor = document.getElementById('display-plan-editor');
+  if (!editor) return;
+  var pluginEntries = Object.entries(plugins || {});
+  editor.innerHTML = (schedule || []).map(function(item, idx) {
+    var pluginIds = Array.isArray(item.plugin_ids) ? item.plugin_ids : [];
+    return '<div class="schedule-editor-item" data-index="' + idx + '">' +
+      '<div class="flex-row" style="margin-bottom:8px">' +
+        '<input type="text" data-field="label" value="' + esc(item.label || '') + '" placeholder="Block name" style="flex:1">' +
+        '<button class="btn btn-danger btn-sm" onclick="removeDisplayPlanBlock(' + idx + ')">Remove</button>' +
+      '</div>' +
+      '<div class="schedule-grid">' +
+        '<div><label>Start Hour</label><input type="number" min="0" max="23" data-field="start_hour" value="' + esc(item.start_hour) + '"></div>' +
+        '<div><label>End Hour</label><input type="number" min="1" max="24" data-field="end_hour" value="' + esc(item.end_hour) + '"></div>' +
+        '<div><label>Rotate Every (min)</label><input type="number" min="1" max="1440" data-field="rotation_minutes" value="' + esc(item.rotation_minutes || 10) + '"></div>' +
+        '<div><label>Enabled</label><input type="checkbox" data-field="enabled"' + (item.enabled ? ' checked' : '') + '></div>' +
+      '</div>' +
+      '<div style="margin-top:8px"><label>Plugins In Rotation</label><div class="plugin-checks">' +
+        pluginEntries.map(function(entry) {
+          var checked = pluginIds.indexOf(entry[0]) !== -1 ? ' checked' : '';
+          return '<label><input type="checkbox" data-plugin-id="' + entry[0] + '"' + checked + '><span>' + esc((entry[1] && entry[1].name) || entry[0]) + '</span></label>';
+        }).join('') +
+      '</div></div>' +
+    '</div>';
+  }).join('');
+}
+
+function addDisplayPlanBlock() {
+  if (!_displayPlanState) return;
+  var schedule = Array.isArray(_displayPlanState.display_schedule) ? _displayPlanState.display_schedule.slice() : [];
+  schedule.push({
+    label: 'New Block',
+    start_hour: 8,
+    end_hour: 12,
+    rotation_minutes: 10,
+    enabled: true,
+    plugin_ids: [_displayPlanState.single_plugin || _displayPlanState.active_plugin || 'pokemon']
+  });
+  _displayPlanState.display_schedule = schedule;
+  renderDisplayPlanEditor(schedule, _displayPlanState.selectable_plugins || {});
+}
+
+function removeDisplayPlanBlock(index) {
+  if (!_displayPlanState || !Array.isArray(_displayPlanState.display_schedule)) return;
+  _displayPlanState.display_schedule = _displayPlanState.display_schedule.filter(function(_, idx) { return idx !== index; });
+  renderDisplayPlanEditor(_displayPlanState.display_schedule, _displayPlanState.selectable_plugins || {});
+}
+
+function collectDisplayPlanSchedule() {
+  var editor = document.getElementById('display-plan-editor');
+  if (!editor) return [];
+  return Array.from(editor.querySelectorAll('.schedule-editor-item')).map(function(item) {
+    var selectedPlugins = Array.from(item.querySelectorAll('[data-plugin-id]:checked')).map(function(cb) {
+      return cb.getAttribute('data-plugin-id');
+    });
+    return {
+      label: item.querySelector('[data-field="label"]').value.trim() || 'Block',
+      start_hour: parseInt(item.querySelector('[data-field="start_hour"]').value, 10) || 0,
+      end_hour: parseInt(item.querySelector('[data-field="end_hour"]').value, 10) || 24,
+      rotation_minutes: parseInt(item.querySelector('[data-field="rotation_minutes"]').value, 10) || 10,
+      enabled: !!item.querySelector('[data-field="enabled"]').checked,
+      plugin_ids: selectedPlugins.length ? selectedPlugins : [document.getElementById('single-plugin').value || 'pokemon']
+    };
+  });
+}
+
+function saveDisplayPlan() {
+  var mode = document.getElementById('display-mode').value || 'single';
+  var singlePlugin = document.getElementById('single-plugin').value || 'pokemon';
+  var body = {
+    display_mode: mode,
+    single_plugin: singlePlugin,
+    display_schedule: collectDisplayPlanSchedule()
+  };
+  fetch(API + '/api/display_plan', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  }).then(r => r.json()).then(function(d) {
+    if (d && d.ok) {
+      showToast('Display plan saved');
+      loadDisplayPlan();
+      startRapidPoll();
+    } else {
+      showToast((d && d.error) || 'Failed to save display plan');
+    }
+  }).catch(function() {
+    showToast('Failed to save display plan');
   });
 }
 

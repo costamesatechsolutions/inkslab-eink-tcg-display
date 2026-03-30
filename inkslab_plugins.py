@@ -30,6 +30,7 @@ class PluginDefinition:
     source: str = "builtin"
     manifest_path: Optional[str] = None
     runtime_enabled: bool = True
+    config_schema: Optional[List[Dict[str, str]]] = None
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -74,6 +75,119 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         accent_color="#F59E0B",
         description="User-uploaded custom image slideshow mode.",
         settings_keys=["collection_only", "slab_header_mode", "rotation_angle", "color_saturation"],
+    ),
+    "weather": PluginDefinition(
+        plugin_id="weather",
+        name="Weather",
+        kind="weather",
+        accent_color="#5AA9E6",
+        description="Ambient weather snapshot for e-ink dashboards.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["location_name", "weather_units", "weather_refresh_minutes"],
+        config_schema=[
+            {"key": "location_name", "label": "Location", "type": "text"},
+            {"key": "weather_units", "label": "Units", "type": "select"},
+            {"key": "weather_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "news": PluginDefinition(
+        plugin_id="news",
+        name="News Headlines",
+        kind="news",
+        accent_color="#F28482",
+        description="Top RSS headlines in a calm, summary-first layout.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["news_feed_url", "news_refresh_minutes"],
+        config_schema=[
+            {"key": "news_feed_url", "label": "RSS Feed URL", "type": "text"},
+            {"key": "news_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "market": PluginDefinition(
+        plugin_id="market",
+        name="Market Snapshot",
+        kind="market",
+        accent_color="#84A98C",
+        description="A simple stocks, crypto, or prediction market overview.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["market_symbols", "market_refresh_minutes"],
+        config_schema=[
+            {"key": "market_symbols", "label": "Symbols", "type": "text"},
+            {"key": "market_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "calendar": PluginDefinition(
+        plugin_id="calendar",
+        name="Calendar Agenda",
+        kind="calendar",
+        accent_color="#B8C0FF",
+        description="Upcoming events for the day in a low-distraction view.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["calendar_source", "calendar_refresh_minutes"],
+        config_schema=[
+            {"key": "calendar_source", "label": "Calendar Source", "type": "text"},
+            {"key": "calendar_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "reminders": PluginDefinition(
+        plugin_id="reminders",
+        name="Reminders",
+        kind="reminders",
+        accent_color="#F6BD60",
+        description="A compact to-do and reminders module for a few key tasks.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["reminders_source", "reminders_refresh_minutes"],
+        config_schema=[
+            {"key": "reminders_source", "label": "Reminders Source", "type": "text"},
+            {"key": "reminders_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "sports": PluginDefinition(
+        plugin_id="sports",
+        name="Sports Schedule",
+        kind="sports",
+        accent_color="#90BE6D",
+        description="Schedule-only sports plugin designed for slow-refresh e-ink screens.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["sports_team", "sports_refresh_minutes"],
+        config_schema=[
+            {"key": "sports_team", "label": "Team", "type": "text"},
+            {"key": "sports_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "transit": PluginDefinition(
+        plugin_id="transit",
+        name="Transit Snapshot",
+        kind="transit",
+        accent_color="#43AA8B",
+        description="Static route and commute summaries instead of live countdowns.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["transit_route", "transit_refresh_minutes"],
+        config_schema=[
+            {"key": "transit_route", "label": "Route", "type": "text"},
+            {"key": "transit_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
+    ),
+    "traffic": PluginDefinition(
+        plugin_id="traffic",
+        name="Traffic Snapshot",
+        kind="traffic",
+        accent_color="#F94144",
+        description="Low-frequency traffic summaries for a typical route.",
+        builtin=True,
+        runtime_enabled=False,
+        settings_keys=["traffic_route", "traffic_refresh_minutes"],
+        config_schema=[
+            {"key": "traffic_route", "label": "Route", "type": "text"},
+            {"key": "traffic_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+        ],
     ),
 }
 
@@ -157,6 +271,15 @@ def get_plugins() -> Dict[str, PluginDefinition]:
     return plugins
 
 
+def get_runtime_plugins() -> Dict[str, PluginDefinition]:
+    """Return plugins that are safe to run in the current daemon."""
+    return {
+        plugin_id: plugin
+        for plugin_id, plugin in get_plugins().items()
+        if plugin.runtime_enabled
+    }
+
+
 def get_plugin(plugin_id: str) -> Optional[PluginDefinition]:
     """Return a plugin definition by ID, or None if missing."""
     return get_plugins().get(plugin_id)
@@ -181,16 +304,47 @@ def get_plugin_ids() -> List[str]:
     return list(get_plugins().keys())
 
 
-def normalize_active_plugin(value: Optional[str], default: str = "pokemon") -> str:
-    """Normalize a requested active plugin ID to a known built-in plugin."""
-    if value in get_plugins():
+def get_runtime_plugin_ids() -> List[str]:
+    """Return plugins that can be selected for the live display."""
+    return list(get_runtime_plugins().keys())
+
+
+def default_enabled_plugins(default_plugin: str = "pokemon") -> List[str]:
+    """Return the default runnable plugin set for new configs."""
+    runtime_ids = get_runtime_plugin_ids()
+    if default_plugin in runtime_ids:
+        return [default_plugin] + [plugin_id for plugin_id in runtime_ids if plugin_id != default_plugin]
+    return runtime_ids or ["pokemon"]
+
+
+def normalize_enabled_plugins(enabled_plugins, default_plugin: str = "pokemon") -> List[str]:
+    """Normalize enabled plugin IDs to runnable, unique plugins."""
+    runtime_ids = get_runtime_plugin_ids()
+    normalized: List[str] = []
+    if isinstance(enabled_plugins, list):
+        for raw_id in enabled_plugins[:32]:
+            plugin_id = str(raw_id).strip()
+            if plugin_id in runtime_ids and plugin_id not in normalized:
+                normalized.append(plugin_id)
+    if not normalized:
+        return default_enabled_plugins(default_plugin)
+    return normalized
+
+
+def normalize_active_plugin(value: Optional[str], default: str = "pokemon", allowed_ids=None) -> str:
+    """Normalize a requested active plugin ID to a runnable plugin."""
+    allowed = allowed_ids if allowed_ids is not None else get_runtime_plugin_ids()
+    if value in allowed:
         return str(value)
-    return default
+    if default in allowed:
+        return default
+    return allowed[0] if allowed else default
 
 
-def default_display_schedule(default_plugin: str = "pokemon") -> List[Dict[str, object]]:
+def default_display_schedule(default_plugin: str = "pokemon", enabled_plugins=None) -> List[Dict[str, object]]:
     """Return a simple all-day schedule seeded with one plugin."""
-    plugin_id = normalize_active_plugin(default_plugin)
+    allowed = normalize_enabled_plugins(enabled_plugins, default_plugin)
+    plugin_id = normalize_active_plugin(default_plugin, default_plugin, allowed)
     return [{
         "plugin_ids": [plugin_id],
         "label": "All Day",
@@ -201,8 +355,9 @@ def default_display_schedule(default_plugin: str = "pokemon") -> List[Dict[str, 
     }]
 
 
-def normalize_display_schedule(schedule, default_plugin: str = "pokemon") -> List[Dict[str, object]]:
+def normalize_display_schedule(schedule, default_plugin: str = "pokemon", enabled_plugins=None) -> List[Dict[str, object]]:
     """Normalize saved schedule data into a safe, minimal structure."""
+    enabled_ids = normalize_enabled_plugins(enabled_plugins, default_plugin)
     normalized = []
     if isinstance(schedule, list):
         for item in schedule[:8]:
@@ -214,11 +369,11 @@ def normalize_display_schedule(schedule, default_plugin: str = "pokemon") -> Lis
                 raw_ids = [legacy_single] if legacy_single else [default_plugin]
             plugin_ids = []
             for raw_id in raw_ids[:8]:
-                normalized_id = normalize_active_plugin(raw_id, default_plugin)
+                normalized_id = normalize_active_plugin(raw_id, default_plugin, enabled_ids)
                 if normalized_id not in plugin_ids:
                     plugin_ids.append(normalized_id)
             if not plugin_ids:
-                plugin_ids = [normalize_active_plugin(default_plugin)]
+                plugin_ids = [normalize_active_plugin(default_plugin, default_plugin, enabled_ids)]
             try:
                 start_hour = max(0, min(23, int(item.get("start_hour", 0))))
             except (TypeError, ValueError):
@@ -243,21 +398,26 @@ def normalize_display_schedule(schedule, default_plugin: str = "pokemon") -> Lis
                 "rotation_minutes": rotation_minutes,
             })
     if not normalized:
-        return default_display_schedule(default_plugin)
+        return default_display_schedule(default_plugin, enabled_ids)
     return normalized
 
 
 def resolve_active_plugin(config: Dict[str, object], now_struct=None) -> str:
     """Resolve the currently active plugin from single/scheduled display config."""
+    enabled_plugins = normalize_enabled_plugins(
+        config.get("enabled_plugins"),
+        config.get("single_plugin") or config.get("active_plugin") or config.get("active_tcg") or "pokemon",
+    )
     single_plugin = normalize_active_plugin(
         config.get("single_plugin") or config.get("active_plugin") or config.get("active_tcg"),
         "pokemon",
+        enabled_plugins,
     )
     mode = str(config.get("display_mode") or "single").strip().lower()
     if mode != "schedule":
         return single_plugin
 
-    schedule = normalize_display_schedule(config.get("display_schedule"), single_plugin)
+    schedule = normalize_display_schedule(config.get("display_schedule"), single_plugin, enabled_plugins)
     now_struct = now_struct or time.localtime()
     current_hour = now_struct.tm_hour
     current_minute = now_struct.tm_hour * 60 + now_struct.tm_min
@@ -277,14 +437,20 @@ def resolve_active_plugin(config: Dict[str, object], now_struct=None) -> str:
 def normalize_display_config(config: Dict[str, object]) -> Dict[str, object]:
     """Normalize display planning config while preserving current behavior."""
     normalized = dict(config)
+    enabled_plugins = normalize_enabled_plugins(
+        normalized.get("enabled_plugins"),
+        normalized.get("single_plugin") or normalized.get("active_plugin") or normalized.get("active_tcg") or "pokemon",
+    )
     single_plugin = normalize_active_plugin(
         normalized.get("single_plugin") or normalized.get("active_plugin") or normalized.get("active_tcg"),
         "pokemon",
+        enabled_plugins,
     )
     mode = str(normalized.get("display_mode") or "single").strip().lower()
     if mode not in ("single", "schedule"):
         mode = "single"
-    schedule = normalize_display_schedule(normalized.get("display_schedule"), single_plugin)
+    schedule = normalize_display_schedule(normalized.get("display_schedule"), single_plugin, enabled_plugins)
+    normalized["enabled_plugins"] = enabled_plugins
     normalized["single_plugin"] = single_plugin
     normalized["display_mode"] = mode
     normalized["display_schedule"] = schedule

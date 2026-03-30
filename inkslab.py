@@ -21,13 +21,14 @@ import logging
 import signal
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
 import wifi_manager
-from inkslab_plugins import get_card_libraries, normalize_display_config
+from inkslab_plugins import default_enabled_plugins, get_card_libraries, normalize_display_config
 
 # --- DEFAULT CONFIGURATION ---
 # These defaults are used if no config file exists.
 # The web dashboard writes to the config file to change settings on the fly.
 DEFAULTS = {
     "active_tcg": "pokemon",
+    "enabled_plugins": default_enabled_plugins("pokemon"),
     "single_plugin": "pokemon",
     "display_mode": "single",
     "display_schedule": [{"plugin_ids": ["pokemon"], "label": "All Day", "start_hour": 0, "end_hour": 24, "enabled": True, "rotation_minutes": 10}],
