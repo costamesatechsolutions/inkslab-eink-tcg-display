@@ -2416,6 +2416,15 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .search-filter-chip .sfc-count { color: #6BCCBD; font-size: 11px; }
 .search-filter-chip .sfc-x { cursor: pointer; color: #6BCCBD; font-size: 14px; line-height: 1; margin-left: 2px; padding: 0 2px; border-radius: 50%; }
 .search-filter-chip .sfc-x:hover { color: #ff6b6b; background: #ff6b6b22; }
+
+/* Plugins */
+.plugin-list { display: flex; flex-direction: column; gap: 8px; }
+.plugin-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px 12px; background: #16303E; }
+.plugin-item.active { border-color: #36A5CA; box-shadow: inset 0 0 0 1px #36A5CA33; }
+.plugin-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.plugin-name { font-size: 14px; color: #FCFDF0; font-weight: 600; }
+.plugin-badge { font-size: 10px; color: #010001; background: #6BCCBD; border-radius: 999px; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+.plugin-meta { font-size: 11px; color: #8899a6; }
 </style>
 </head>
 <body>
@@ -2535,6 +2544,12 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       </div>
     </div>
     <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
+  </div>
+  <div class="card">
+    <h3>Installed Plugins</h3>
+    <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
+    <div id="plugin-list" class="plugin-list"></div>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">This branch is preparing for installable modules. Right now these are built-in plugins using the new shared plugin system.</p>
   </div>
   <div class="card">
     <h3>Software Update</h3>
@@ -2980,6 +2995,7 @@ function loadSettings() {
     document.getElementById('cfg-day-end').value = c.day_end;
     document.getElementById('cfg-saturation').value = c.color_saturation;
     document.getElementById('cfg-collection').checked = c.collection_only;
+    loadPlugins();
     loadUpdateBranches(c.update_branch);
     updateTimezoneHint();
     // Auto-detect timezone on first load if not set — just works for shipped units
@@ -3049,6 +3065,35 @@ function saveUpdateBranch() {
     body: JSON.stringify({update_branch: branch})
   }).then(r => r.json()).then(function(d) {
     if (d && !d.error) showToast('Update branch set to ' + branch);
+  });
+}
+
+function loadPlugins() {
+  fetch(API + '/api/plugins').then(r => r.json()).then(function(d) {
+    var summaryEl = document.getElementById('plugin-summary');
+    var listEl = document.getElementById('plugin-list');
+    if (!summaryEl || !listEl) return;
+    var plugins = d.plugins || {};
+    var active = d.active_plugin || '';
+    var entries = Object.entries(plugins);
+    summaryEl.textContent = entries.length + ' plugin' + (entries.length === 1 ? '' : 's') + ' installed. Active: ' + active;
+    listEl.innerHTML = entries.map(function(entry) {
+      var id = entry[0];
+      var plugin = entry[1] || {};
+      var activeBadge = id === active ? '<span class="plugin-badge">Active</span>' : '<span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">Built-in</span>';
+      var meta = [];
+      if (plugin.kind) meta.push(plugin.kind.toUpperCase());
+      if (plugin.download_script) meta.push('downloadable');
+      if (plugin.settings_keys && plugin.settings_keys.length) meta.push(plugin.settings_keys.length + ' shared settings');
+      return '<div class="plugin-item' + (id === active ? ' active' : '') + '">' +
+        '<div class="plugin-top"><div class="plugin-name">' + esc(plugin.name || id) + '</div>' + activeBadge + '</div>' +
+        '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
+        '<div class="plugin-meta" style="margin-top:6px">' + esc(meta.join(' • ')) + '</div>' +
+      '</div>';
+    }).join('');
+  }).catch(function() {
+    var summaryEl = document.getElementById('plugin-summary');
+    if (summaryEl) summaryEl.textContent = 'Could not load plugins.';
   });
 }
 
