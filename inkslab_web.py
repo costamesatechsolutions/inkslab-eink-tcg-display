@@ -2452,8 +2452,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .search-filter-chip .sfc-x:hover { color: #ff6b6b; background: #ff6b6b22; }
 
 /* Plugins */
-.plugin-list { display: flex; flex-direction: column; gap: 8px; }
-.plugin-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px 12px; background: #16303E; }
+.plugin-list { display: flex; flex-direction: column; gap: 12px; }
+.plugin-item { border: 1px solid #1F333F; border-radius: 10px; padding: 12px 14px; background: #16303E; }
 .plugin-item.active { border-color: #36A5CA; box-shadow: inset 0 0 0 1px #36A5CA33; }
 .plugin-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .plugin-main { min-width: 0; flex: 1; }
@@ -2461,12 +2461,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-summary { font-size: 12px; color: #D8E6E4; margin-top: 2px; }
 .plugin-badge { font-size: 10px; color: #010001; background: #6BCCBD; border-radius: 999px; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.4px; }
 .plugin-badge-stack { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.plugin-expand { border: 1px solid #36A5CA33; background: #132E3E; color: #6BCCBD; border-radius: 999px; width: 28px; height: 28px; font-size: 16px; line-height: 1; cursor: pointer; }
-.plugin-expand.active { background: #36A5CA; color: #FCFDF0; border-color: #36A5CA; }
 .plugin-meta { font-size: 11px; color: #8899a6; }
-.plugin-detail { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; }
-.plugin-detail.open { display: block; }
-.plugin-inline-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.plugin-inline-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .schedule-list { display: flex; flex-direction: column; gap: 8px; }
 .schedule-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px 12px; background: #16303E; }
 .schedule-time { font-size: 12px; color: #6BCCBD; font-weight: 600; }
@@ -2475,7 +2471,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-toggle { display: flex; align-items: center; gap: 6px; color: #D8E6E4; font-size: 12px; }
 .plugin-note { font-size: 11px; color: #8899a6; margin-top: 8px; line-height: 1.4; }
 .plugin-actions { display: flex; gap: 8px; margin-top: 10px; }
-.plugin-settings { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; display: flex; flex-direction: column; gap: 8px; }
+.plugin-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; }
+.plugin-settings { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
 .plugin-settings-row label { display: block; color: #6BCCBD; font-size: 11px; margin-bottom: 4px; }
 .plugin-settings-row input, .plugin-settings-row select { width: 100%; }
 .context-note { font-size: 12px; color: #6BCCBD; margin: 6px 0 10px; line-height: 1.45; }
@@ -3258,16 +3255,6 @@ function saveUpdateBranch() {
   });
 }
 
-function togglePluginDetail(pluginId) {
-  var detail = document.getElementById('plugin-detail-' + pluginId);
-  var btn = document.getElementById('plugin-expand-' + pluginId);
-  if (!detail || !btn) return;
-  var isOpen = detail.classList.contains('open');
-  detail.classList.toggle('open', !isOpen);
-  btn.classList.toggle('active', !isOpen);
-  btn.innerHTML = isOpen ? '+' : '&minus;';
-}
-
 function activatePlugin(pluginId) {
   var rotationMinutes = (_displayPlanState && _displayPlanState.display_rotation_minutes) ? _displayPlanState.display_rotation_minutes : 10;
   fetch(API + '/api/display_plan', {
@@ -3356,16 +3343,13 @@ function loadPlugins() {
           return '<div class="plugin-settings-row"><label for="' + esc(fieldId) + '">' + esc(field.label || fieldKey) + '</label>' + inputHtml + '</div>';
         }).join('') + '</div>';
       }
-      var detailsOpen = id === active;
       return '<div class="plugin-item' + (id === active ? ' active' : '') + '">' +
         '<div class="plugin-top">' +
           '<div class="plugin-main">' +
             '<div class="plugin-name">' + esc(plugin.name || id) + '</div>' +
             '<div class="plugin-summary">' + esc(summary) + '</div>' +
           '</div>' +
-          '<div class="plugin-badge-stack">' + badge +
-            '<button class="plugin-expand' + (detailsOpen ? ' active' : '') + '" id="plugin-expand-' + id + '" onclick="togglePluginDetail(\\'' + id + '\\')">' + (detailsOpen ? '&minus;' : '+') + '</button>' +
-          '</div>' +
+          '<div class="plugin-badge-stack">' + badge + '</div>' +
         '</div>' +
         '<div class="plugin-inline-status">' +
           (isRuntime
@@ -3373,7 +3357,7 @@ function loadPlugins() {
               '<button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Show Now</button>'
             : '<div class="plugin-note" style="margin-top:0">Not runnable yet</div>') +
         '</div>' +
-        '<div class="plugin-detail' + (detailsOpen ? ' open' : '') + '" id="plugin-detail-' + id + '">' +
+        '<div class="plugin-body">' +
           '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
           (meta.length ? '<div class="plugin-meta" style="margin-top:6px">' + esc(meta.join(' • ')) + '</div>' : '') +
           settingsHtml +
