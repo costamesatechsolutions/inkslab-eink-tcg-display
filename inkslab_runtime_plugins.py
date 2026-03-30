@@ -4,6 +4,7 @@ Runtime rendering helpers for built-in non-card plugins.
 """
 
 from inkslab_calendar import calendar_wait_seconds, render_calendar_canvas
+from inkslab_market import market_wait_seconds, render_market_canvas
 from inkslab_news import news_wait_seconds, render_news_canvas
 from inkslab_weather import render_weather_canvas, weather_wait_seconds
 
@@ -33,6 +34,14 @@ def _format_calendar_status(snapshot):
     events = snapshot.get("events") or []
     count = len(events)
     return f"{count} events" if count else ""
+
+
+def _format_market_status(snapshot):
+    if not isinstance(snapshot, dict) or not snapshot.get("ok"):
+        return ""
+    quotes = snapshot.get("quotes") or []
+    count = len(quotes)
+    return f"{count} symbols" if count else ""
 
 
 def render_runtime_plugin(plugin_id, config):
@@ -70,5 +79,15 @@ def render_runtime_plugin(plugin_id, config):
             "card_num": _format_calendar_status(plugin_snapshot),
             "rarity": plugin_snapshot.get("reason") or "Upcoming events",
             "error": plugin_snapshot.get("reason", "Calendar is temporarily unavailable."),
+        }
+    if plugin_id == "market":
+        plugin_canvas, plugin_snapshot = render_market_canvas(config)
+        return plugin_canvas, {
+            "name": "Market",
+            "wait_seconds": market_wait_seconds(config),
+            "set_info": "Market Snapshot",
+            "card_num": _format_market_status(plugin_snapshot),
+            "rarity": plugin_snapshot.get("reason") or "Stocks and crypto",
+            "error": plugin_snapshot.get("reason", "Market data is temporarily unavailable."),
         }
     return None, None

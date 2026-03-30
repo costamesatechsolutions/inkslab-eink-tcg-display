@@ -1377,7 +1377,7 @@ def main():
     try:
         while not _shutdown:
             if active_tcg not in TCG_LIBRARIES:
-                if active_tcg not in ("weather", "news", "calendar"):
+                if active_tcg not in ("weather", "news", "calendar", "market"):
                     write_status({
                         "card_path": "",
                         "set_name": "Plugin Not Ready",
