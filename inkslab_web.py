@@ -2473,6 +2473,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-actions { display: flex; gap: 8px; margin-top: 10px; }
 .plugin-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; }
 .plugin-settings { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.plugin-savebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 12px; padding: 10px 12px; border-radius: 8px; background: #132E3E; border: 1px solid #36A5CA33; }
+.plugin-savebar-note { font-size: 11px; color: #8899a6; line-height: 1.4; }
 .plugin-settings-row label { display: block; color: #6BCCBD; font-size: 11px; margin-bottom: 4px; }
 .plugin-settings-row input, .plugin-settings-row select { width: 100%; }
 .context-note { font-size: 12px; color: #6BCCBD; margin: 6px 0 10px; line-height: 1.45; }
@@ -2669,8 +2671,12 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <h3>Installed Apps</h3>
       <p class="context-note">Enable only the apps you want this slab to use. After an app is enabled, you can show it right away or include it in the display behavior above.</p>
       <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
+      <div class="plugin-savebar">
+        <div class="plugin-savebar-note">Enable apps, adjust settings, then save once here. You should not have to scroll to the bottom just to keep your changes.</div>
+        <button class="btn btn-primary" onclick="savePluginConfig()">Save Apps</button>
+      </div>
       <div id="plugin-list" class="plugin-list"></div>
-      <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save App Settings</button>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Apps</button>
       <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Some apps are still marked coming soon. Those are placeholders for the modular system and are not runnable yet.</p>
     </div>
   </div>

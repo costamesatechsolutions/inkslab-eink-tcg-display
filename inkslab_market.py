@@ -113,7 +113,7 @@ def _demo_snapshot(settings):
     return {
         "ok": True,
         "mode": "demo",
-        "provider": "Demo",
+        "provider": "Sample Data",
         "quotes": quotes,
         "reason": "Demo values are showing. Turn demo mode off to use free Yahoo Finance quotes.",
         "updated_at": int(time.time()),
@@ -205,7 +205,7 @@ def render_market_canvas(config):
 
     font_title = _load_font(18, bold=True)
     font_header = _load_font(18, bold=True)
-    font_symbol = _load_font(22, bold=True)
+    font_symbol = _load_font(20, bold=True)
     font_price = _load_font(24, bold=True)
     font_meta = _load_font(12)
     font_body = _load_font(13)
@@ -215,21 +215,40 @@ def render_market_canvas(config):
     draw.text((20, 40), "Snapshot", fill=(255, 255, 255), font=font_header)
     mode_label = "Demo" if snapshot.get("mode") == "demo" else "Live"
     draw.text((380, 16), mode_label, fill=(255, 255, 255), font=font_meta, anchor="ra")
-    draw.text((380, 40), str(snapshot.get("provider") or "Market")[:18], fill=(255, 255, 255), font=font_meta, anchor="ra")
+    provider_label = str(snapshot.get("provider") or "Market")[:18]
+    if provider_label != mode_label:
+        draw.text((380, 40), provider_label, fill=(255, 255, 255), font=font_meta, anchor="ra")
 
     quotes = snapshot.get("quotes") or []
     top = 104
-    block_height = max(106, int((582 - top) / max(1, len(quotes))))
+    footer_reserved = 52 if snapshot.get("reason") else 22
+    block_height = max(96, int((600 - footer_reserved - top) / max(1, len(quotes))))
     for item in quotes[:4]:
         draw.rounded_rectangle((20, top, 380, top + block_height - 14), radius=16, outline=(0, 0, 255), width=2, fill=(252, 253, 240))
-        draw.text((36, top + 18), item.get("symbol", "--"), fill=(0, 0, 0), font=font_symbol)
-        draw.text((364, top + 22), _format_change(item.get("change_pct")), fill=_change_color(item.get("change_pct")), font=font_meta, anchor="ra")
-        draw.text((36, top + 52), _format_price(item.get("price")), fill=(0, 0, 0), font=font_price)
-        draw.text((36, top + 84), str(item.get("label", ""))[:36], fill=(0, 0, 0), font=font_body)
+        draw.text((36, top + 16), item.get("symbol", "--"), fill=(0, 0, 0), font=font_symbol)
+        draw.text((364, top + 18), _format_change(item.get("change_pct")), fill=_change_color(item.get("change_pct")), font=font_meta, anchor="ra")
+        draw.text((36, top + 48), _format_price(item.get("price")), fill=(0, 0, 0), font=font_price)
+        draw.text((36, top + 82), str(item.get("label", ""))[:36], fill=(0, 0, 0), font=font_body)
         top += block_height
 
     if snapshot.get("reason"):
-        draw.text((20, 556), snapshot["reason"][:52], fill=(0, 0, 0), font=font_meta)
+        reason = str(snapshot["reason"])
+        reason_lines = []
+        current = ""
+        words = reason.split()
+        for word in words:
+            trial = (current + " " + word).strip()
+            if draw.textbbox((0, 0), trial, font=font_meta)[2] <= 360 or not current:
+                current = trial
+            else:
+                reason_lines.append(current)
+                current = word
+                if len(reason_lines) >= 2:
+                    break
+        if current and len(reason_lines) < 2:
+            reason_lines.append(current)
+        for idx, line in enumerate(reason_lines):
+            draw.text((20, 546 + (idx * 14)), line, fill=(0, 0, 0), font=font_meta)
 
     updated_struct = time.localtime(snapshot.get("updated_at", int(time.time())))
     draw.line((20, 582, 380, 582), fill=(220, 226, 230), width=1)

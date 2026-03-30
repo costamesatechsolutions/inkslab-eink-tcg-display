@@ -334,6 +334,7 @@ def render_calendar_canvas(config):
     font_title = _load_font(18, bold=True)
     font_header = _load_font(20, bold=True)
     font_event = _load_font(18, bold=True)
+    font_time = _load_font(14, bold=True)
     font_body = _load_font(13)
     font_meta = _load_font(12)
 
@@ -364,7 +365,7 @@ def render_calendar_canvas(config):
             time_label = "All Day" if item.get("all_day") else item.get("start_time", "")
             if item.get("end_time"):
                 time_label += " - " + item["end_time"]
-            draw.text((380, top + 2), time_label, fill=(0, 0, 255), font=font_meta, anchor="ra")
+            draw.text((380, top + 1), time_label, fill=(0, 0, 255), font=font_time, anchor="ra")
             y = top + 20
             for line in _wrap_text(draw, item.get("summary", ""), font_event, 332, 2):
                 draw.text((20, y), line, fill=(0, 0, 0), font=font_event)

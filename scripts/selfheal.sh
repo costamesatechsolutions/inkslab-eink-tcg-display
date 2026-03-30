@@ -125,6 +125,10 @@ else
     echo "selfheal: All files OK"
 fi
 
+# Keep modular app dependencies in sync on boot so OTA updates and repairs
+# don't leave new plugins half-installed.
+bash "$SCRIPT_DIR/scripts/sync_python_deps.sh" >/dev/null 2>&1 || echo "selfheal: dependency sync failed"
+
 # Clean up any stale lock/temp files from previous crashes.
 # Skip update status file if an OTA update is in progress — the update script
 # manages its own lifecycle and selfheal runs mid-update when services restart.

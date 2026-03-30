@@ -19,7 +19,7 @@ if ! python3 -c "import qrcode" 2>/dev/null; then
 fi
 
 # Install Python packages that are not reliably available via apt
-pip3 install --break-system-packages -r "$SCRIPT_DIR/requirements.txt" >/dev/null 2>&1 || pip3 install -r "$SCRIPT_DIR/requirements.txt" >/dev/null 2>&1 || true
+bash "$SCRIPT_DIR/scripts/sync_python_deps.sh" >/dev/null 2>&1 || true
 
 # Verify critical imports
 for mod in PIL numpy flask requests qrcode spidev gpiozero yfinance; do
