@@ -40,6 +40,7 @@ from inkslab_paths import (
     WIFI_SETUP_TRIGGER,
 )
 from inkslab_weather import render_weather_canvas, weather_wait_seconds
+from inkslab_news import render_news_canvas, news_wait_seconds
 
 # --- DEFAULT CONFIGURATION ---
 # These defaults are used if no config file exists.
@@ -230,6 +231,15 @@ def _format_weather_status(snapshot):
         return f"{int(round(float(temp)))} {units_suffix}"
     except (TypeError, ValueError):
         return ""
+
+
+def _format_news_status(snapshot):
+    """Short news string for dashboard status rows."""
+    if not isinstance(snapshot, dict) or not snapshot.get("ok"):
+        return ""
+    headlines = snapshot.get("headlines") or []
+    count = len(headlines)
+    return f"{count} headlines" if count else ""
 
 
 def make_qr(url, box_size=4, border=1):
@@ -1389,7 +1399,7 @@ def main():
     try:
         while not _shutdown:
             if active_tcg not in TCG_LIBRARIES:
-                if active_tcg != "weather":
+                if active_tcg not in ("weather", "news"):
                     write_status({
                         "card_path": "",
                         "set_name": "Plugin Not Ready",
@@ -1407,22 +1417,39 @@ def main():
                         rebuild_deck()
                     continue
 
-                logger.info("Displaying: weather")
-                weather_canvas, weather_snapshot = render_weather_canvas(config)
-                final_img = finalize_display_image(weather_canvas, config)
-                weather_canvas.close()
-                weather_canvas = None
+                if active_tcg == "weather":
+                    logger.info("Displaying: weather")
+                    plugin_canvas, plugin_snapshot = render_weather_canvas(config)
+                    plugin_name = "Weather"
+                    plugin_wait = weather_wait_seconds(config)
+                    plugin_location = plugin_snapshot.get("location_label", "")
+                    plugin_card_num = _format_weather_status(plugin_snapshot)
+                    plugin_rarity = plugin_snapshot.get("condition_label", plugin_snapshot.get("reason", ""))
+                    plugin_error = plugin_snapshot.get("reason", "Weather is temporarily unavailable.")
+                else:
+                    logger.info("Displaying: news")
+                    plugin_canvas, plugin_snapshot = render_news_canvas(config)
+                    plugin_name = "News"
+                    plugin_wait = news_wait_seconds(config)
+                    plugin_location = plugin_snapshot.get("feed_title", "")
+                    plugin_card_num = _format_news_status(plugin_snapshot)
+                    plugin_rarity = plugin_snapshot.get("reason") or "Top headlines"
+                    plugin_error = plugin_snapshot.get("reason", "News is temporarily unavailable.")
+
+                final_img = finalize_display_image(plugin_canvas, config)
+                plugin_canvas.close()
+                plugin_canvas = None
                 if not final_img:
                     write_status({
                         "card_path": "",
-                        "set_name": "Weather",
-                        "set_info": weather_snapshot.get("location_label", ""),
+                        "set_name": plugin_name,
+                        "set_info": plugin_location,
                         "card_num": "",
-                        "rarity": weather_snapshot.get("reason", "Weather is temporarily unavailable."),
+                        "rarity": plugin_error,
                         "timestamp": int(time.time()),
                         "tcg": active_tcg,
                         "total_cards": 0,
-                        "error": weather_snapshot.get("reason", "Weather is temporarily unavailable."),
+                        "error": plugin_error,
                     })
                     config, _ = wait_with_polling(60)
                     active_tcg = config["active_tcg"]
@@ -1433,7 +1460,7 @@ def main():
                 wait = resolve_display_wait(
                     config.get("display_mode"),
                     config.get("display_schedule"),
-                    weather_wait_seconds(config),
+                    plugin_wait,
                 )
                 paused = os.path.exists(PAUSE_FILE)
                 if paused:
@@ -1445,10 +1472,10 @@ def main():
 
                 status_info = {
                     "card_path": "",
-                    "set_name": "Weather",
-                    "set_info": weather_snapshot.get("location_label", ""),
-                    "card_num": _format_weather_status(weather_snapshot),
-                    "rarity": weather_snapshot.get("condition_label", weather_snapshot.get("reason", "")),
+                    "set_name": plugin_name,
+                    "set_info": plugin_location,
+                    "card_num": plugin_card_num,
+                    "rarity": plugin_rarity,
                     "timestamp": int(time.time()),
                     "tcg": active_tcg,
                     "total_cards": 0,

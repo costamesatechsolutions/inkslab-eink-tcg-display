@@ -108,11 +108,11 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         accent_color="#F28482",
         description="Top RSS headlines in a calm, summary-first layout.",
         builtin=True,
-        runtime_enabled=False,
+        runtime_enabled=True,
         settings_keys=["news_feed_url", "news_refresh_minutes"],
         config_schema=[
-            {"key": "news_feed_url", "label": "RSS Feed URL", "type": "text"},
-            {"key": "news_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+            {"key": "news_feed_url", "label": "RSS Feed URL", "type": "text", "default": "https://feeds.npr.org/1001/rss.xml"},
+            {"key": "news_refresh_minutes", "label": "Refresh Minutes", "type": "number", "default": 30},
         ],
     ),
     "market": PluginDefinition(
