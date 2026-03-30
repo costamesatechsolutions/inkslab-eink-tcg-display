@@ -147,6 +147,7 @@ def discover_external_plugins() -> Dict[str, PluginDefinition]:
             if not plugin or plugin.plugin_id in BUILTIN_PLUGINS or plugin.plugin_id in discovered:
                 continue
             discovered[plugin.plugin_id] = plugin
+    return discovered
 
 
 def get_plugins() -> Dict[str, PluginDefinition]:
