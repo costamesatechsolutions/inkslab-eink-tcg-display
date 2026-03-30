@@ -49,6 +49,13 @@ from inkslab_plugins import (
     normalize_enabled_plugins,
     normalize_active_plugin,
 )
+from inkslab_update_helpers import (
+    configure_git_safe_directory,
+    git_current_branch,
+    git_default_branch,
+    git_remote_branches,
+    normalize_update_branch,
+)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
@@ -1415,80 +1422,7 @@ def api_delete():
 
 # --- OTA UPDATE ---
 # Fix "dubious ownership" — web service runs as root but repo is owned by pi
-subprocess.run(['git', 'config', '--global', 'safe.directory', SCRIPT_DIR],
-               capture_output=True, timeout=5)
-
-
-def _git_default_branch():
-    """Detect the remote default branch (main or master)."""
-    try:
-        r = subprocess.run(['git', 'symbolic-ref', 'refs/remotes/origin/HEAD'],
-                           cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=5)
-        if r.returncode == 0:
-            return r.stdout.strip().split('/')[-1]
-    except Exception:
-        pass
-    # Fallback: check which branch exists
-    for branch in ('main', 'master'):
-        r = subprocess.run(['git', 'rev-parse', '--verify', f'origin/{branch}'],
-                           cwd=SCRIPT_DIR, capture_output=True, timeout=5)
-        if r.returncode == 0:
-            return branch
-    return 'main'
-
-
-def _git_current_branch():
-    """Return the currently checked out branch name."""
-    try:
-        r = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                           cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=5)
-        if r.returncode == 0:
-            branch = r.stdout.strip()
-            if branch and branch != "HEAD":
-                return branch
-    except Exception:
-        pass
-    return _git_default_branch()
-
-
-def _git_remote_branches(fetch_first=False):
-    """Return available remote branches on origin."""
-    if fetch_first:
-        try:
-            subprocess.run(['git', 'fetch', '--prune', 'origin'],
-                           cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=30)
-        except Exception:
-            pass
-    branches = []
-    try:
-        r = subprocess.run(
-            ['git', 'for-each-ref', '--format=%(refname:strip=3)', 'refs/remotes/origin'],
-            cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=5
-        )
-        if r.returncode == 0:
-            branches = [b.strip() for b in r.stdout.splitlines() if b.strip() and b.strip() != 'HEAD']
-    except Exception:
-        pass
-    if not branches:
-        branches = [_git_default_branch()]
-    if 'master' in branches:
-        branches = ['master'] + [b for b in branches if b != 'master']
-    return branches
-
-
-def _normalize_update_branch(branch, available=None):
-    """Normalize a selected update branch to a valid remote branch."""
-    available = available or _git_remote_branches(fetch_first=False)
-    candidate = (branch or '').strip()
-    if candidate in available:
-        return candidate
-    current = _git_current_branch()
-    if current in available:
-        return current
-    default = _git_default_branch()
-    if default in available:
-        return default
-    return available[0]
+configure_git_safe_directory(SCRIPT_DIR)
 
 
 @app.route('/api/version')
@@ -1509,13 +1443,13 @@ def api_version():
 @app.route('/api/update/branches')
 def api_update_branches():
     """Return available update branches for the current repo."""
-    branches = _git_remote_branches(fetch_first=True)
+    branches = git_remote_branches(SCRIPT_DIR, fetch_first=True)
     config = load_config()
     return jsonify({
         "branches": branches,
-        "selected": _normalize_update_branch(config.get("update_branch"), branches),
-        "current": _git_current_branch(),
-        "default": _git_default_branch(),
+        "selected": normalize_update_branch(SCRIPT_DIR, config.get("update_branch"), branches),
+        "current": git_current_branch(SCRIPT_DIR),
+        "default": git_default_branch(SCRIPT_DIR),
     })
 
 
@@ -1529,9 +1463,9 @@ def api_update_check():
                                capture_output=True, text=True, timeout=30)
         if fetch.returncode != 0:
             return jsonify({"ok": False, "error": "Could not reach update server. Check your internet connection."})
-        branches = _git_remote_branches(fetch_first=False)
+        branches = git_remote_branches(SCRIPT_DIR, fetch_first=False)
         config = load_config()
-        branch = _normalize_update_branch(body.get("branch") or config.get("update_branch"), branches)
+        branch = normalize_update_branch(SCRIPT_DIR, body.get("branch") or config.get("update_branch"), branches)
         local = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=SCRIPT_DIR,
                                capture_output=True, text=True, timeout=5)
         remote = subprocess.run(['git', 'rev-parse', f'origin/{branch}'], cwd=SCRIPT_DIR,
@@ -1566,8 +1500,8 @@ def api_update_start():
         return jsonify({"ok": False, "error": "Update script not found"})
     try:
         body = request.get_json(silent=True) or {}
-        branches = _git_remote_branches(fetch_first=True)
-        branch = _normalize_update_branch(body.get("branch") or load_config().get("update_branch"), branches)
+        branches = git_remote_branches(SCRIPT_DIR, fetch_first=True)
+        branch = normalize_update_branch(SCRIPT_DIR, body.get("branch") or load_config().get("update_branch"), branches)
         with _config_lock:
             config = load_config()
             config["update_branch"] = branch
