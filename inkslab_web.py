@@ -1260,11 +1260,16 @@ def api_delete():
     if not tcg or tcg not in TCG_LIBRARIES:
         return jsonify({"ok": False, "error": "Invalid TCG"}), 400
 
+    with _download_lock:
+        if _download_proc and _download_proc.poll() is None and _download_tcg == tcg:
+            return jsonify({"ok": False, "error": "Stop the current download before deleting this TCG."}), 409
+
     path = TCG_LIBRARIES[tcg]
     if os.path.exists(path):
         try:
             shutil.rmtree(path)
             _cache_invalidate('storage', 'rarities_' + tcg, 'sets_' + tcg)
+            _signal_library_changed(tcg)
             return jsonify({"ok": True, "tcg": tcg})
         except Exception as e:
             app.logger.error(f"Delete failed for {tcg}: {e}")
@@ -1764,6 +1769,7 @@ def api_custom_delete_folder(name):
         if os.path.isdir(folder):
             shutil.rmtree(folder)
     _cache_invalidate('sets_custom', 'storage')
+    _signal_library_changed('custom')
     return jsonify({"ok": True})
 
 
@@ -1792,6 +1798,7 @@ def api_custom_delete_card(folder, card_id):
             except OSError:
                 pass
     _cache_invalidate('sets_custom', 'storage')
+    _signal_library_changed('custom')
     return jsonify({"ok": True})
 
 
@@ -1855,6 +1862,7 @@ def api_custom_upload():
         }
         _atomic_write_json(data_file, data)
     _cache_invalidate('sets_custom', 'storage')
+    _signal_library_changed('custom')
     return jsonify({"ok": True, "card_id": card_id})
 
 
