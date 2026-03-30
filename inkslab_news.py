@@ -19,20 +19,45 @@ from inkslab_paths import NEWS_CACHE_FILE
 
 
 DEFAULT_NEWS_FEED = "https://feeds.npr.org/1001/rss.xml"
+NEWS_FEED_PRESETS = {
+    "npr_top": {
+        "label": "NPR Top News",
+        "url": "https://feeds.npr.org/1001/rss.xml",
+    },
+    "google_top": {
+        "label": "Google News Top Stories",
+        "url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en",
+    },
+}
 
 
 def get_news_settings(config):
     plugin_settings = config.get("plugin_settings") if isinstance(config, dict) else {}
     bucket = plugin_settings.get("news") if isinstance(plugin_settings, dict) else {}
     bucket = bucket if isinstance(bucket, dict) else {}
-    feed_url = str(bucket.get("news_feed_url") or DEFAULT_NEWS_FEED).strip() or DEFAULT_NEWS_FEED
+    preset = str(bucket.get("news_feed_preset") or "npr_top").strip().lower()
+    custom_feed_url = str(bucket.get("news_feed_url") or "").strip()
+    preset_info = NEWS_FEED_PRESETS.get(preset) or NEWS_FEED_PRESETS["npr_top"]
+    if preset == "custom":
+        feed_url = custom_feed_url or DEFAULT_NEWS_FEED
+        feed_label = "Custom RSS Feed" if custom_feed_url else NEWS_FEED_PRESETS["npr_top"]["label"]
+    else:
+        feed_url = preset_info["url"]
+        feed_label = preset_info["label"]
     try:
         refresh_minutes = max(10, min(360, int(bucket.get("news_refresh_minutes", 30))))
     except (TypeError, ValueError):
         refresh_minutes = 30
+    try:
+        headline_count = max(2, min(5, int(bucket.get("news_headline_count", 4))))
+    except (TypeError, ValueError):
+        headline_count = 4
     return {
+        "news_feed_preset": preset if preset in NEWS_FEED_PRESETS or preset == "custom" else "npr_top",
         "news_feed_url": feed_url[:240],
+        "news_feed_label": feed_label[:80],
         "news_refresh_minutes": refresh_minutes,
+        "news_headline_count": headline_count,
     }
 
 
@@ -147,6 +172,7 @@ def fetch_news_snapshot(config):
             snapshot = {
                 "ok": False,
                 "feed_url": feed_url,
+                "feed_label": settings["news_feed_label"],
                 "feed_title": "News",
                 "reason": "This feed did not return any headlines.",
                 "headlines": [],
@@ -157,6 +183,7 @@ def fetch_news_snapshot(config):
         snapshot = {
             "ok": True,
             "feed_url": feed_url,
+            "feed_label": settings["news_feed_label"],
             "feed_title": feed_title,
             "reason": "",
             "headlines": entries,
@@ -171,6 +198,7 @@ def fetch_news_snapshot(config):
         snapshot = {
             "ok": False,
             "feed_url": feed_url,
+            "feed_label": settings["news_feed_label"],
             "feed_title": "News",
             "reason": "Could not load the news feed right now.",
             "headlines": [],
@@ -204,47 +232,57 @@ def _wrap_text(draw, text, font, max_width, max_lines):
 
 def render_news_canvas(config):
     snapshot = fetch_news_snapshot(config)
+    settings = get_news_settings(config)
     canvas = Image.new("RGB", (400, 600), (255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
     font_title = _load_font(18, bold=True)
-    font_source = _load_font(22, bold=True)
+    font_source = _load_font(18, bold=True)
     font_headline = _load_font(20, bold=True)
     font_summary = _load_font(13)
     font_meta = _load_font(12)
 
-    draw.rectangle((0, 0, 400, 96), fill=(0, 0, 255))
+    draw.rectangle((0, 0, 400, 86), fill=(0, 0, 255))
     draw.text((20, 14), "News", fill=(255, 255, 255), font=font_title)
-    for idx, line in enumerate(_wrap_text(draw, snapshot.get("feed_title", "News"), font_source, 360, 2)):
-        draw.text((20, 40 + (idx * 22)), line, fill=(255, 255, 255), font=font_source)
+    source_name = snapshot.get("feed_label") or snapshot.get("feed_title", "News")
+    source_lines = _wrap_text(draw, source_name, font_source, 250, 2)
+    for idx, line in enumerate(source_lines):
+        draw.text((20, 38 + (idx * 18)), line, fill=(255, 255, 255), font=font_source)
+    if snapshot.get("feed_title") and snapshot.get("feed_title") != source_name:
+        draw.text((380, 16), snapshot.get("feed_title")[:24], fill=(255, 255, 255), font=font_meta, anchor="ra")
 
     if not snapshot.get("ok"):
         draw.rounded_rectangle((20, 122, 380, 520), radius=16, outline=(0, 0, 255), width=3, fill=(252, 253, 240))
         draw.text((200, 188), "News Setup", fill=(0, 0, 0), font=font_source, anchor="mm")
         for idx, line in enumerate(_wrap_text(draw, snapshot.get("reason", "News is not ready yet."), font_headline, 300, 4)):
             draw.text((200, 250 + (idx * 26)), line, fill=(0, 0, 0), font=font_headline, anchor="mm")
-        draw.text((200, 454), "Set up the feed in Setup > Apps > News Headlines.", fill=(0, 0, 255), font=font_meta, anchor="mm")
+        draw.text((200, 438), "Set up the feed in Setup > Apps > News Headlines.", fill=(0, 0, 255), font=font_meta, anchor="mm")
+        draw.text((200, 462), "Use a preset or paste a public RSS feed URL.", fill=(0, 0, 0), font=font_meta, anchor="mm")
         return canvas, snapshot
 
-    top = 114
-    for idx, item in enumerate((snapshot.get("headlines") or [])[:3], start=1):
+    headlines = (snapshot.get("headlines") or [])[:settings["news_headline_count"]]
+    top = 98
+    footer_top = 582
+    block_height = max(92, int((footer_top - top) / max(1, len(headlines))))
+    for idx, item in enumerate(headlines, start=1):
         if idx > 1:
             draw.line((20, top - 10, 380, top - 10), fill=(220, 226, 230), width=1)
-        draw.text((20, top), str(idx), fill=(255, 128, 0), font=_load_font(22, bold=True))
-        headline_lines = _wrap_text(draw, item.get("title", ""), font_headline, 322, 2)
+        draw.text((20, top), str(idx), fill=(255, 128, 0), font=_load_font(24, bold=True))
+        published = _format_published_label(item.get("published"))
+        if published:
+            draw.text((380, top + 4), published, fill=(0, 0, 255), font=font_meta, anchor="ra")
+        headline_lines = _wrap_text(draw, item.get("title", ""), font_headline, 292, 3 if len(headlines) <= 3 else 2)
         y = top - 2
         for line in headline_lines:
             draw.text((52, y), line, fill=(0, 0, 0), font=font_headline)
             y += 23
-        published = _format_published_label(item.get("published"))
-        if published:
-            draw.text((380, top + 2), published, fill=(0, 0, 255), font=font_meta, anchor="ra")
         summary = item.get("summary", "")
         if summary:
-            for line in _wrap_text(draw, summary, font_summary, 328, 2):
+            summary_lines = 3 if len(headlines) <= 3 else 2
+            for line in _wrap_text(draw, summary, font_summary, 320, summary_lines):
                 draw.text((52, y + 4), line, fill=(0, 0, 0), font=font_summary)
                 y += 16
-        top = y + 22
+        top += block_height
 
     updated_struct = time.localtime(snapshot.get("updated_at", int(time.time())))
     draw.line((20, 582, 380, 582), fill=(220, 226, 230), width=1)

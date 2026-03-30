@@ -106,13 +106,25 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         name="News Headlines",
         kind="news",
         accent_color="#F28482",
-        description="Top RSS headlines in a calm, summary-first layout.",
+        description="Top RSS headlines in a calm, summary-first layout. Use a preset or paste your own public RSS feed URL.",
         builtin=True,
         runtime_enabled=True,
-        settings_keys=["news_feed_url", "news_refresh_minutes"],
+        settings_keys=["news_feed_preset", "news_feed_url", "news_refresh_minutes", "news_headline_count"],
         config_schema=[
-            {"key": "news_feed_url", "label": "RSS Feed URL", "type": "text", "default": "https://feeds.npr.org/1001/rss.xml"},
+            {
+                "key": "news_feed_preset",
+                "label": "Feed Preset",
+                "type": "select",
+                "default": "npr_top",
+                "options": [
+                    {"value": "npr_top", "label": "NPR Top News"},
+                    {"value": "google_top", "label": "Google News Top Stories"},
+                    {"value": "custom", "label": "Custom RSS URL"},
+                ],
+            },
+            {"key": "news_feed_url", "label": "Custom RSS Feed URL", "type": "text", "default": ""},
             {"key": "news_refresh_minutes", "label": "Refresh Minutes", "type": "number", "default": 30},
+            {"key": "news_headline_count", "label": "Headline Count", "type": "number", "default": 4},
         ],
     ),
     "market": PluginDefinition(
