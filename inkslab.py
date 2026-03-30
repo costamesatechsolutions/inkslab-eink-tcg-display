@@ -181,12 +181,21 @@ def write_status(info):
         pass
 
 
-def save_current_preview(img):
+def save_current_preview(img, rotation_angle=270):
     """Persist the latest rendered display image for the web preview."""
     try:
+        preview_img = img
+        try:
+            preview_rotation = (360 - int(rotation_angle)) % 360
+        except (TypeError, ValueError):
+            preview_rotation = 90
+        if preview_rotation:
+            preview_img = img.rotate(preview_rotation, expand=True)
         tmp_path = CURRENT_PREVIEW_FILE + ".tmp"
-        img.save(tmp_path, format="PNG")
+        preview_img.save(tmp_path, format="PNG")
         os.replace(tmp_path, CURRENT_PREVIEW_FILE)
+        if preview_img is not img:
+            preview_img.close()
     except Exception:
         pass
 
@@ -331,7 +340,7 @@ def show_splash_screen(epd, config):
         img_rgb.close()
 
         epd.init()
-        save_current_preview(final)
+        save_current_preview(final, config.get("rotation_angle", 270))
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -413,7 +422,7 @@ def show_setup_screen(epd, config):
         img_rgb.close()
 
         epd.init()
-        save_current_preview(final)
+        save_current_preview(final, config.get("rotation_angle", 270))
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -489,7 +498,7 @@ def show_wifi_failed_screen(epd, config, ssid=""):
         img_rgb.close()
 
         epd.init()
-        save_current_preview(final)
+        save_current_preview(final, config.get("rotation_angle", 270))
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -584,7 +593,7 @@ def show_no_cards_screen(epd, config, ip=None):
         img_rgb.close()
 
         epd.init()
-        save_current_preview(final)
+        save_current_preview(final, config.get("rotation_angle", 270))
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -642,7 +651,7 @@ def show_unbox_screen(epd, config):
         img_rgb.close()
 
         epd.init()
-        save_current_preview(final)
+        save_current_preview(final, config.get("rotation_angle", 270))
         epd.display(epd.getbuffer(final))
         epd.sleep()
         final.close()
@@ -1453,7 +1462,7 @@ def main():
                 write_status(status_info)
 
                 try:
-                    save_current_preview(final_img)
+                    save_current_preview(final_img, config.get("rotation_angle", 270))
                     epd.init()
                     epd.display(epd.getbuffer(final_img))
                 except Exception as e:
@@ -1678,7 +1687,7 @@ def main():
                 write_status(status_info)
 
                 try:
-                    save_current_preview(final_img)
+                    save_current_preview(final_img, config.get("rotation_angle", 270))
                     epd.init()
                     epd.display(epd.getbuffer(final_img))
                 except Exception as e:
