@@ -15,7 +15,6 @@ import json
 import shutil
 import signal
 import subprocess
-import tempfile
 import time
 import threading
 from flask import Flask, request, jsonify, send_file, redirect, make_response
@@ -56,6 +55,17 @@ from inkslab_update_helpers import (
     git_remote_branches,
     normalize_update_branch,
 )
+from inkslab_web_state import (
+    WEB_DEFAULTS,
+    atomic_write_json as _atomic_write_json,
+    load_collection as _load_collection_state,
+    load_config as _load_config_state,
+    manual_control_block_reason as _manual_control_block_reason,
+    read_status as _read_status,
+    save_collection as _save_collection_state,
+    save_config as _save_config_state,
+    write_status as _write_status,
+)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
@@ -77,24 +87,7 @@ TCG_LIBRARIES = get_card_libraries()
 
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
-DEFAULTS = {
-    "active_tcg": "pokemon",
-    "enabled_plugins": default_enabled_plugins("pokemon"),
-    "single_plugin": "pokemon",
-    "display_mode": "single",
-    "display_schedule": default_display_schedule("pokemon"),
-    "rotation_angle": 270,
-    "day_interval": 600,
-    "night_interval": 3600,
-    "day_start": 7,
-    "day_end": 23,
-    "color_saturation": 2.5,
-    "collection_only": False,
-    "slab_header_mode": "normal",
-    "timezone_offset": None,
-    "timezone_name": None,
-    "update_branch": None,
-}
+DEFAULTS = WEB_DEFAULTS
 
 # Track running download process
 _download_proc = None
@@ -114,29 +107,6 @@ _custom_lock = threading.Lock()
 MIN_FREE_SPACE_MB = 50  # Refuse writes if less than this much free space
 
 
-def _atomic_write_json(path, data, indent=None):
-    """Write JSON atomically: write to temp file, then os.rename().
-
-    This prevents corruption from power loss or crash mid-write.
-    os.rename() is atomic on the same filesystem (always true for /home/pi).
-    """
-    dir_name = os.path.dirname(path) or '.'
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
-    try:
-        with os.fdopen(fd, 'w') as f:
-            json.dump(data, f, indent=indent)
-            f.flush()
-            os.fsync(f.fileno())
-        os.rename(tmp_path, path)
-    except Exception:
-        # Clean up temp file on failure
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
-
 def _check_disk_space(path="/home/pi"):
     """Return free space in MB. Returns 0 if check fails."""
     try:
@@ -150,40 +120,6 @@ def _has_disk_space(path="/home/pi"):
     """Return True if there's enough free space to safely write."""
     return _check_disk_space(path) >= MIN_FREE_SPACE_MB
 
-
-def _write_status(data):
-    """Atomic write to STATUS_FILE (tmp + os.replace on same tmpfs)."""
-    try:
-        tmp = STATUS_FILE + '.tmp'
-        with open(tmp, 'w') as f:
-            json.dump(data, f)
-        os.replace(tmp, STATUS_FILE)
-    except Exception:
-        pass
-
-
-def _read_status():
-    """Read the current status JSON defensively."""
-    if not os.path.exists(STATUS_FILE):
-        return {}
-    try:
-        with open(STATUS_FILE, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-def _manual_control_block_reason():
-    """Return a user-facing reason if manual controls should be blocked."""
-    status = _read_status()
-    pending = str(status.get('pending') or '').strip().lower()
-    if pending.startswith('starting up'):
-        return "InkSlab is still starting up. Give it a moment, then try again."
-    if pending.startswith('updating display plan'):
-        return "InkSlab is applying a display plan change. Try again in a moment."
-    if status.get('display_updating') and not status.get('card_path'):
-        return "InkSlab is still preparing the display. Try again in a moment."
-    return None
 
 # --- TTL CACHE (avoids re-walking 15,000+ files on every request) ---
 _cache = {}
@@ -243,38 +179,23 @@ def _signal_library_changed(tcg):
 # --- HELPERS ---
 
 def load_config():
-    config = dict(DEFAULTS)
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r') as f:
-                config.update(json.load(f))
-        except Exception:
-            pass
-    config = normalize_display_config(config)
-    config["update_branch"] = normalize_update_branch(SCRIPT_DIR, config.get("update_branch"))
-    return config
+    return _load_config_state(SCRIPT_DIR)
 
 
 def save_config(config):
     try:
-        _atomic_write_json(CONFIG_FILE, config, indent=2)
+        _save_config_state(config)
     except Exception as e:
         app.logger.error(f"Failed to save config: {e}")
 
 
 def load_collection():
-    if os.path.exists(COLLECTION_FILE):
-        try:
-            with open(COLLECTION_FILE, 'r') as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    return _load_collection_state()
 
 
 def save_collection(data):
     try:
-        _atomic_write_json(COLLECTION_FILE, data)
+        _save_collection_state(data)
     except Exception as e:
         app.logger.error(f"Failed to save collection: {e}")
     # Signal daemon that collection changed so it can rebuild its deck
