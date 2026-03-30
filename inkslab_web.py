@@ -3369,13 +3369,13 @@ function loadPlugins() {
         '</div>' +
         '<div class="plugin-inline-status">' +
           (isRuntime
-            ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Enable</label>'
+            ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Enable</label>' +
+              '<button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Use Now</button>'
             : '<div class="plugin-note" style="margin-top:0">Not runnable yet</div>') +
         '</div>' +
         '<div class="plugin-detail' + (detailsOpen ? ' open' : '') + '" id="plugin-detail-' + id + '">' +
           '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
           (meta.length ? '<div class="plugin-meta" style="margin-top:6px">' + esc(meta.join(' • ')) + '</div>' : '') +
-          (isRuntime ? '<div class="plugin-actions"><button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Use Now</button></div>' : '') +
           settingsHtml +
           '<div class="plugin-note">' + esc(note) + '</div>' +
         '</div>' +
