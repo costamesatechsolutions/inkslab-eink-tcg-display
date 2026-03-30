@@ -21,9 +21,11 @@ import threading
 from flask import Flask, request, jsonify, send_file, redirect, make_response
 import wifi_manager
 from inkslab_plugins import (
+    default_display_schedule,
     get_card_libraries,
     get_plugin_payload,
     get_plugins,
+    normalize_display_config,
     normalize_active_plugin,
 )
 
@@ -58,6 +60,9 @@ IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
 DEFAULTS = {
     "active_tcg": "pokemon",
+    "single_plugin": "pokemon",
+    "display_mode": "single",
+    "display_schedule": default_display_schedule("pokemon"),
     "rotation_angle": 270,
     "day_interval": 600,
     "night_interval": 3600,
@@ -202,8 +207,7 @@ def load_config():
                 config.update(json.load(f))
         except Exception:
             pass
-    config["active_tcg"] = normalize_active_plugin(config.get("active_tcg"))
-    config["active_plugin"] = config["active_tcg"]
+    config = normalize_display_config(config)
     config["update_branch"] = _normalize_update_branch(config.get("update_branch"))
     return config
 
@@ -322,6 +326,8 @@ def api_set_config():
         return jsonify({"error": "invalid request"}), 400
     if 'active_plugin' in updates and 'active_tcg' not in updates:
         updates['active_tcg'] = updates['active_plugin']
+    if 'single_plugin' in updates and 'active_tcg' not in updates:
+        updates['active_tcg'] = updates['single_plugin']
     if 'update_branch' in updates:
         updates['update_branch'] = _normalize_update_branch(updates['update_branch'])
     # Validate values to prevent bad config from crashing the display daemon
@@ -355,6 +361,7 @@ def api_set_config():
         return jsonify({"error": "invalid value"}), 400
     if 'active_tcg' in updates:
         updates['active_tcg'] = normalize_active_plugin(updates['active_tcg'])
+        updates['single_plugin'] = updates['active_tcg']
     if 'slab_header_mode' in updates:
         if updates['slab_header_mode'] not in ('normal', 'inverted', 'off'):
             updates['slab_header_mode'] = 'normal'
@@ -363,8 +370,10 @@ def api_set_config():
         for key in DEFAULTS:
             if key in updates:
                 config[key] = updates[key]
+        if 'single_plugin' in updates:
+            config['active_tcg'] = updates['single_plugin']
+        config = normalize_display_config(config)
         save_config(config)
-        config["active_plugin"] = config["active_tcg"]
     # Write interim status so the web UI reflects the change instantly,
     # even if the display daemon is blocked on a 15-30s e-paper refresh.
     if 'active_tcg' in updates:
@@ -563,7 +572,22 @@ def api_plugins():
     config = load_config()
     return jsonify({
         "active_plugin": config["active_plugin"],
+        "display_mode": config["display_mode"],
+        "single_plugin": config["single_plugin"],
+        "display_schedule": config["display_schedule"],
         "plugins": get_plugin_payload(),
+    })
+
+
+@app.route('/api/display_plan')
+def api_display_plan():
+    """Return the experimental display planning config."""
+    config = load_config()
+    return jsonify({
+        "display_mode": config["display_mode"],
+        "single_plugin": config["single_plugin"],
+        "display_schedule": config["display_schedule"],
+        "active_plugin": config["active_plugin"],
     })
 
 
@@ -2425,6 +2449,10 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-name { font-size: 14px; color: #FCFDF0; font-weight: 600; }
 .plugin-badge { font-size: 10px; color: #010001; background: #6BCCBD; border-radius: 999px; padding: 2px 8px; text-transform: uppercase; letter-spacing: 0.4px; }
 .plugin-meta { font-size: 11px; color: #8899a6; }
+.schedule-list { display: flex; flex-direction: column; gap: 8px; }
+.schedule-item { border: 1px solid #1F333F; border-radius: 8px; padding: 10px 12px; background: #16303E; }
+.schedule-time { font-size: 12px; color: #6BCCBD; font-weight: 600; }
+.schedule-title { font-size: 13px; color: #FCFDF0; font-weight: 600; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -2544,6 +2572,12 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       </div>
     </div>
     <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
+  </div>
+  <div class="card">
+    <h3>Display Plan</h3>
+    <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
+    <div id="display-plan-list" class="schedule-list"></div>
+    <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">This is the foundation for easy scheduling later. For now, playback still follows the current active plugin while we build the rest of the system safely.</p>
   </div>
   <div class="card">
     <h3>Installed Plugins</h3>
@@ -2995,6 +3029,7 @@ function loadSettings() {
     document.getElementById('cfg-day-end').value = c.day_end;
     document.getElementById('cfg-saturation').value = c.color_saturation;
     document.getElementById('cfg-collection').checked = c.collection_only;
+    loadDisplayPlan();
     loadPlugins();
     loadUpdateBranches(c.update_branch);
     updateTimezoneHint();
@@ -3094,6 +3129,35 @@ function loadPlugins() {
   }).catch(function() {
     var summaryEl = document.getElementById('plugin-summary');
     if (summaryEl) summaryEl.textContent = 'Could not load plugins.';
+  });
+}
+
+function loadDisplayPlan() {
+  fetch(API + '/api/display_plan').then(r => r.json()).then(function(d) {
+    var summaryEl = document.getElementById('display-plan-summary');
+    var listEl = document.getElementById('display-plan-list');
+    if (!summaryEl || !listEl) return;
+    var mode = d.display_mode || 'single';
+    var schedule = d.display_schedule || [];
+    if (mode === 'schedule') {
+      summaryEl.textContent = 'Schedule mode is enabled. The saved plan below is ready for future scheduled playback.';
+    } else {
+      summaryEl.textContent = 'Single mode is active. Current plugin: ' + (d.single_plugin || d.active_plugin || '-');
+    }
+    listEl.innerHTML = schedule.map(function(item) {
+      var title = esc(item.label || item.plugin_id || '');
+      var plugin = esc(item.plugin_id || '');
+      var timeLabel = String(item.start_hour).padStart(2, '0') + ':00 - ' + String(item.end_hour).padStart(2, '0') + ':00';
+      var disabled = item.enabled ? '' : ' <span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">Disabled</span>';
+      return '<div class="schedule-item">' +
+        '<div class="schedule-time">' + esc(timeLabel) + disabled + '</div>' +
+        '<div class="schedule-title">' + title + '</div>' +
+        '<div class="plugin-meta" style="margin-top:4px">Plugin: ' + plugin + '</div>' +
+      '</div>';
+    }).join('');
+  }).catch(function() {
+    var summaryEl = document.getElementById('display-plan-summary');
+    if (summaryEl) summaryEl.textContent = 'Could not load display plan.';
   });
 }
 

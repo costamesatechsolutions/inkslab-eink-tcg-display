@@ -105,3 +105,66 @@ def normalize_active_plugin(value: Optional[str], default: str = "pokemon") -> s
     if value in BUILTIN_PLUGINS:
         return str(value)
     return default
+
+
+def default_display_schedule(default_plugin: str = "pokemon") -> List[Dict[str, object]]:
+    """Return a simple all-day schedule seeded with one plugin."""
+    plugin_id = normalize_active_plugin(default_plugin)
+    return [{
+        "plugin_id": plugin_id,
+        "label": "All Day",
+        "start_hour": 0,
+        "end_hour": 24,
+        "enabled": True,
+    }]
+
+
+def normalize_display_schedule(schedule, default_plugin: str = "pokemon") -> List[Dict[str, object]]:
+    """Normalize saved schedule data into a safe, minimal structure."""
+    normalized = []
+    if isinstance(schedule, list):
+        for item in schedule[:8]:
+            if not isinstance(item, dict):
+                continue
+            plugin_id = normalize_active_plugin(item.get("plugin_id"), default_plugin)
+            try:
+                start_hour = max(0, min(23, int(item.get("start_hour", 0))))
+            except (TypeError, ValueError):
+                start_hour = 0
+            try:
+                end_hour = max(1, min(24, int(item.get("end_hour", 24))))
+            except (TypeError, ValueError):
+                end_hour = 24
+            if end_hour <= start_hour:
+                end_hour = min(24, start_hour + 1)
+            label = str(item.get("label", "")).strip()[:40] or plugin_id.replace("_", " ").title()
+            normalized.append({
+                "plugin_id": plugin_id,
+                "label": label,
+                "start_hour": start_hour,
+                "end_hour": end_hour,
+                "enabled": bool(item.get("enabled", True)),
+            })
+    if not normalized:
+        return default_display_schedule(default_plugin)
+    return normalized
+
+
+def normalize_display_config(config: Dict[str, object]) -> Dict[str, object]:
+    """Normalize display planning config while preserving current behavior."""
+    normalized = dict(config)
+    single_plugin = normalize_active_plugin(
+        normalized.get("single_plugin") or normalized.get("active_plugin") or normalized.get("active_tcg"),
+        "pokemon",
+    )
+    mode = str(normalized.get("display_mode") or "single").strip().lower()
+    if mode not in ("single", "schedule"):
+        mode = "single"
+    schedule = normalize_display_schedule(normalized.get("display_schedule"), single_plugin)
+    normalized["single_plugin"] = single_plugin
+    normalized["display_mode"] = mode
+    normalized["display_schedule"] = schedule
+    # Current app behavior still follows a single active plugin.
+    normalized["active_plugin"] = single_plugin
+    normalized["active_tcg"] = single_plugin
+    return normalized
