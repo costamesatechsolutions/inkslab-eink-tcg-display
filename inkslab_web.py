@@ -227,7 +227,7 @@ def load_config():
         except Exception:
             pass
     config = normalize_display_config(config)
-    config["update_branch"] = _normalize_update_branch(config.get("update_branch"))
+    config["update_branch"] = normalize_update_branch(SCRIPT_DIR, config.get("update_branch"))
     return config
 
 
@@ -348,7 +348,7 @@ def api_set_config():
     if 'single_plugin' in updates and 'active_tcg' not in updates:
         updates['active_tcg'] = updates['single_plugin']
     if 'update_branch' in updates:
-        updates['update_branch'] = _normalize_update_branch(updates['update_branch'])
+        updates['update_branch'] = normalize_update_branch(SCRIPT_DIR, updates['update_branch'])
     # Validate values to prevent bad config from crashing the display daemon
     try:
         if 'day_interval' in updates:
