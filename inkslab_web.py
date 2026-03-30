@@ -865,8 +865,9 @@ def api_collection_toggle_set():
 
 @app.route('/api/collection/clear', methods=['POST'])
 def api_collection_clear():
+    body = request.get_json(silent=True) or {}
     config = load_config()
-    tcg = config["active_tcg"]
+    tcg = body.get("tcg", config["active_tcg"])
     with _collection_lock:
         collection = load_collection()
         collection[tcg] = []
@@ -1124,7 +1125,7 @@ def api_search():
 def api_favorites_get():
     """Return the favorites list for the active TCG."""
     config = load_config()
-    tcg = config["active_tcg"]
+    tcg = request.args.get("tcg", config["active_tcg"])
     collection = load_collection()
     favs = collection.get("_favorites", {}).get(tcg, [])
     return jsonify(favs)
@@ -2502,8 +2503,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <div class="tabs">
   <div class="tab active" id="tab-btn-display" data-tab="display" onclick="showTab('display')">Display</div>
   <div class="tab" id="tab-btn-settings" data-tab="settings" onclick="showTab('settings')">Setup</div>
-  <div class="tab" id="tab-btn-collection" data-tab="collection" onclick="showTab('collection')">Library</div>
-  <div class="tab" id="tab-btn-downloads" data-tab="downloads" onclick="showTab('downloads')">Sources</div>
+  <div class="tab" id="tab-btn-collection" data-tab="collection" onclick="showTab('collection')">Cards</div>
+  <div class="tab" id="tab-btn-downloads" data-tab="downloads" onclick="showTab('downloads')">Card Data</div>
 </div>
 
 <div class="content">
@@ -2545,10 +2546,10 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     </div>
   </div>
   <div class="card" id="display-mode-card">
-    <h3>Display Mode</h3>
+    <h3>Now Showing</h3>
     <p id="display-mode-note" class="context-note">Loading display behavior...</p>
     <div id="quick-switch-card" style="display:none">
-      <p class="subtle-note">Manual card-plugin switching is mainly for testing. Your saved display plan is the normal source of truth.</p>
+      <p class="subtle-note">Manual card switching is only for quick testing. Your saved display setup is what InkSlab normally follows.</p>
       <div class="flex-row" id="quick-switch-btns"></div>
     </div>
   </div>
@@ -2564,8 +2565,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 
   <div class="settings-section active" id="settings-section-overview">
     <div class="card section-intro">
-      <h3>Display Setup</h3>
-      <p class="context-note">This section controls the overall behavior of the slab: how it rotates content, which plugin is the default fallback, and the shared timing and appearance settings for the device.</p>
+      <h3>Basics</h3>
+      <p class="context-note">Set the shared behavior for the slab here: screen style, timing, and the simple rules for what InkSlab should show.</p>
       <div class="pill-note">Start here for normal setup</div>
     </div>
     <div class="card">
@@ -2631,36 +2632,36 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <button class="btn btn-primary btn-block" onclick="saveSettings()">Save Settings</button>
     </div>
     <div class="card">
-      <h3>Display Plan</h3>
-      <p class="context-note">Choose a simple display style first. Most people should never need the advanced schedule editor unless they want very specific time blocks.</p>
+      <h3>What To Show</h3>
+      <p class="context-note">Start with the simple behavior you want. Most people should only need one of the first two options.</p>
       <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
       <div id="display-plan-list" class="schedule-list"></div>
       <div class="form-group" style="margin-top:12px">
-        <label>Easy Display Style</label>
+        <label>Display Behavior</label>
         <select id="display-style" onchange="syncDisplayPlanMode()">
-          <option value="single">Stay On One Plugin</option>
-          <option value="rotate_all_day">Rotate Enabled Plugins All Day</option>
-          <option value="custom">Custom Schedule</option>
+          <option value="single">Show one thing all day</option>
+          <option value="rotate_all_day">Cycle enabled plugins</option>
+          <option value="custom">Custom day plan</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Default / Single Plugin</label>
+        <label>Primary Plugin</label>
         <select id="single-plugin"></select>
       </div>
       <div class="form-group" id="display-rotation-group">
-        <label>Rotation Minutes</label>
+        <label>Switch Every (minutes)</label>
         <input type="number" id="display-rotation-minutes" min="1" max="1440" value="10">
-        <div class="subtle-note">Used by the simple all-day rotation mode and as the starting point for custom schedules.</div>
+        <div class="subtle-note">Used when InkSlab cycles through multiple enabled plugins.</div>
       </div>
       <div id="display-plan-advanced">
         <div class="flex-row" style="margin-bottom:8px">
           <button class="btn btn-secondary btn-block" onclick="addDisplayPlanBlock()">Add Time Block</button>
-          <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
+          <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Day Plan</button>
         </div>
         <div id="display-plan-editor" class="schedule-editor"></div>
-        <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Custom mode is here when you want full control, but the easy modes above should cover the normal setup path.</p>
+        <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Use custom only if you really want different behavior at different times of day.</p>
       </div>
-      <button class="btn btn-primary btn-block" id="display-plan-save-simple" onclick="saveDisplayPlan()">Save Display Plan</button>
+      <button class="btn btn-primary btn-block" id="display-plan-save-simple" onclick="saveDisplayPlan()">Save Display Behavior</button>
     </div>
   </div>
 
@@ -2721,18 +2722,23 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- COLLECTION TAB -->
 <div id="tab-collection" class="panel">
   <div class="card">
-    <h3>Local Library</h3>
-    <p class="context-note">This tab manages the local content library the slab can rotate through. Right now that mainly means trading cards and custom image folders.</p>
-    <div class="pill-note">Local content selection</div>
+    <h3>Cards</h3>
+    <p class="context-note">Manage saved cards for one card plugin at a time. This is separate from what the slab happens to be showing right now.</p>
+    <div class="pill-note">Card plugin management</div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Card Plugin</label>
+      <select id="cards-tcg-select" onchange="setCardPluginContext(this.value, 'cards')"></select>
+      <div class="subtle-note">Choose which card plugin you want to manage. Weather mode will not change this.</div>
+    </div>
   </div>
   <div class="card">
-    <h3>Saved Card Picks</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want to display. Use any criteria you like: favorites, a themed set, a wish list, or cards you collect. Turn on “Only show saved card selections” in Setup if you want the slab to only rotate these.</p>
+    <h3>Saved Cards</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Pick the cards you want InkSlab to use for the selected card plugin. Turn on “Only show saved card selections” in Setup if you want the slab to only rotate these.</p>
     <button class="btn btn-secondary btn-sm" onclick="clearCollection()">Clear All</button>
   </div>
   <div class="card">
-    <h3>Search Library</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Find a card by name and add all versions to your list.</p>
+    <h3>Search Cards</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Find a card by name and add all versions to your list for the selected card plugin.</p>
     <div id="search-filters" class="search-filters" style="display:none"></div>
     <div class="search-wrap">
       <span class="search-icon">&#128269;</span>
@@ -2756,16 +2762,21 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- DOWNLOADS TAB -->
 <div id="tab-downloads" class="panel">
   <div class="card">
-    <h3>Sources & Imports</h3>
-    <p class="context-note">This is where content gets added, refreshed, or removed. Right now it focuses on card downloads and custom image folders, and later it will grow into the home for plugin data sources more broadly.</p>
-    <div class="pill-note">Downloads, imports, and source cleanup</div>
+    <h3>Card Data</h3>
+    <p class="context-note">Download, update, import, or remove local data for card plugins here. This is card-specific setup, not the general plugin manager.</p>
+    <div class="pill-note">Card downloads and imports</div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Card Plugin</label>
+      <select id="sources-tcg-select" onchange="setCardPluginContext(this.value, 'sources')"></select>
+      <div class="subtle-note">Use this to pick which card library you want to download or clean up.</div>
+    </div>
   </div>
   <div class="card">
     <h3>Storage</h3>
     <div id="storage-info"></div>
   </div>
   <div class="card">
-    <h3>Card Downloads</h3>
+    <h3>Download Or Update Cards</h3>
     <div id="dl-buttons"></div>
     <div id="dl-mtg-since" style="display:none;margin-top:8px" class="form-group">
       <label>Download MTG since year:</label>
@@ -2792,8 +2803,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
   <div class="card">
-    <h3>Remove Source Data</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Choose one content source to clear. This stays cleaner as InkSlab grows beyond cards into more plugins and data types.</p>
+    <h3>Remove Card Data</h3>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Choose one card library to clear from the device. This does not remove the plugin itself.</p>
     <div class="form-group" style="margin-bottom:8px">
       <label>Source</label>
       <select id="delete-source"></select>
@@ -3188,6 +3199,9 @@ function updateTimezoneHint() {
 function loadSettings() {
   fetch(API + '/api/config').then(r => r.json()).then(c => {
     document.getElementById('cfg-tcg').value = c.active_tcg;
+    if (!localStorage.getItem('inkslab_card_plugin')) {
+      setCardPluginContext(c.active_tcg || 'pokemon');
+    }
     document.getElementById('cfg-header-mode').value = c.slab_header_mode || 'normal';
     document.getElementById('cfg-rotation').value = c.rotation_angle;
     document.getElementById('cfg-day-interval').value = Math.round(c.day_interval / 60);
@@ -3422,15 +3436,9 @@ function syncModularUI(d) {
     var showManualSwitch = hasTCG && _displayPlanState && _displayPlanState.display_mode === 'single';
     quickSwitch.style.display = showManualSwitch ? 'block' : 'none';
   }
-  if (collectionTabBtn) collectionTabBtn.style.display = hasTCG ? '' : 'none';
-  if (downloadsTabBtn) downloadsTabBtn.style.display = hasTCG ? '' : 'none';
+  if (collectionTabBtn) collectionTabBtn.textContent = 'Cards';
+  if (downloadsTabBtn) downloadsTabBtn.textContent = 'Card Data';
   if (defaultTcgGroup) defaultTcgGroup.style.display = hasTCG ? 'block' : 'none';
-  if (!hasTCG) {
-    var activeTab = localStorage.getItem('inkslab_tab');
-    if (activeTab === 'collection' || activeTab === 'downloads') {
-      showTab('settings');
-    }
-  }
 }
 
 function collectEnabledPlugins() {
@@ -3474,6 +3482,33 @@ function savePluginConfig() {
 }
 
 var _displayPlanState = null;
+var _cardPluginContext = 'pokemon';
+
+function getCardPluginContext() {
+  return _cardPluginContext || localStorage.getItem('inkslab_card_plugin') || 'pokemon';
+}
+
+function setCardPluginContext(tcg, source) {
+  if (!tcg) return;
+  _cardPluginContext = tcg;
+  localStorage.setItem('inkslab_card_plugin', tcg);
+  ['cards-tcg-select', 'sources-tcg-select', 'cfg-tcg'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var hasOption = Array.from(el.options || []).some(function(opt) { return opt.value === tcg; });
+    if (hasOption) el.value = tcg;
+  });
+  updateDeleteSourceUI();
+  loadDlButtons();
+  if (source === 'cards') {
+    loadSets();
+    loadRarities();
+    loadFavorites();
+  }
+  if (source === 'sources') {
+    loadStorage();
+  }
+}
 
 function syncDisplayPlanMode() {
   var styleEl = document.getElementById('display-style');
@@ -3517,15 +3552,17 @@ function loadDisplayPlan() {
       }
       singleEl.value = d.single_plugin || d.active_plugin || 'pokemon';
     }
+    var activeName = plugins[d.active_plugin] && plugins[d.active_plugin].name ? plugins[d.active_plugin].name : (d.active_plugin || '-');
+    var singleName = plugins[d.single_plugin] && plugins[d.single_plugin].name ? plugins[d.single_plugin].name : (d.single_plugin || activeName);
     if (style === 'rotate_all_day') {
-      summaryEl.textContent = 'Easy mode: enabled plugins rotate all day. Active right now: ' + (d.active_plugin || '-') + '.';
-      if (modeNoteEl) modeNoteEl.textContent = 'This device is rotating enabled plugins throughout the day. Active right now: ' + (d.active_plugin || '-') + '.';
+      summaryEl.textContent = 'InkSlab is cycling through your enabled plugins. Showing now: ' + activeName + '.';
+      if (modeNoteEl) modeNoteEl.textContent = 'InkSlab is cycling through enabled plugins. Showing now: ' + activeName + '.';
     } else if (style === 'custom') {
-      summaryEl.textContent = 'Custom schedule mode is enabled. Active right now: ' + (d.active_plugin || '-') + '.';
-      if (modeNoteEl) modeNoteEl.textContent = 'This device is following a custom schedule. Active right now: ' + (d.active_plugin || '-') + '.';
+      summaryEl.textContent = 'InkSlab is following a custom day plan. Showing now: ' + activeName + '.';
+      if (modeNoteEl) modeNoteEl.textContent = 'InkSlab is following your custom day plan. Showing now: ' + activeName + '.';
     } else {
-      summaryEl.textContent = 'Easy mode: stay on one plugin. Current plugin: ' + (d.single_plugin || d.active_plugin || '-');
-      if (modeNoteEl) modeNoteEl.textContent = 'This device stays on one plugin until the display plan changes. Current plugin: ' + (d.single_plugin || d.active_plugin || '-') + '.';
+      summaryEl.textContent = 'InkSlab is staying on one plugin: ' + singleName + '.';
+      if (modeNoteEl) modeNoteEl.textContent = 'InkSlab is staying on one thing until you change the display behavior. Showing now: ' + singleName + '.';
     }
     listEl.innerHTML = schedule.map(function(item) {
       var title = esc(item.label || item.plugin_id || '');
@@ -3533,7 +3570,7 @@ function loadDisplayPlan() {
       var pluginLabel = esc(pluginIds.join(' → '));
       var timeLabel = String(item.start_hour).padStart(2, '0') + ':00 - ' + String(item.end_hour).padStart(2, '0') + ':00';
       var disabled = item.enabled ? '' : ' <span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">Disabled</span>';
-      var rotation = pluginIds.length > 1 ? 'Rotates every ' + (item.rotation_minutes || 10) + ' min' : 'Single plugin block';
+      var rotation = pluginIds.length > 1 ? 'Switches every ' + (item.rotation_minutes || 10) + ' min' : 'One plugin for this block';
       return '<div class="schedule-item">' +
         '<div class="schedule-time">' + esc(timeLabel) + disabled + '</div>' +
         '<div class="schedule-title">' + title + '</div>' +
@@ -3558,16 +3595,16 @@ function renderDisplayPlanEditor(schedule, plugins) {
     var pluginIds = Array.isArray(item.plugin_ids) ? item.plugin_ids : [];
     return '<div class="schedule-editor-item" data-index="' + idx + '">' +
       '<div class="flex-row" style="margin-bottom:8px">' +
-        '<input type="text" data-field="label" value="' + esc(item.label || '') + '" placeholder="Block name" style="flex:1">' +
+        '<input type="text" data-field="label" value="' + esc(item.label || '') + '" placeholder="Morning / Evening / etc." style="flex:1">' +
         '<button class="btn btn-danger btn-sm" onclick="removeDisplayPlanBlock(' + idx + ')">Remove</button>' +
       '</div>' +
       '<div class="schedule-grid">' +
         '<div><label>Start Hour</label><input type="number" min="0" max="23" data-field="start_hour" value="' + esc(item.start_hour) + '"></div>' +
         '<div><label>End Hour</label><input type="number" min="1" max="24" data-field="end_hour" value="' + esc(item.end_hour) + '"></div>' +
-        '<div><label>Rotate Every (min)</label><input type="number" min="1" max="1440" data-field="rotation_minutes" value="' + esc(item.rotation_minutes || 10) + '"></div>' +
+        '<div><label>Switch Every (min)</label><input type="number" min="1" max="1440" data-field="rotation_minutes" value="' + esc(item.rotation_minutes || 10) + '"></div>' +
         '<div><label>Enabled</label><input type="checkbox" data-field="enabled"' + (item.enabled ? ' checked' : '') + '></div>' +
       '</div>' +
-      '<div style="margin-top:8px"><label>Plugins In Rotation</label><div class="plugin-checks">' +
+      '<div style="margin-top:8px"><label>Plugins In This Block</label><div class="plugin-checks">' +
         pluginEntries.map(function(entry) {
           var checked = pluginIds.indexOf(entry[0]) !== -1 ? ' checked' : '';
           return '<label><input type="checkbox" data-plugin-id="' + entry[0] + '"' + checked + '><span>' + esc((entry[1] && entry[1].name) || entry[0]) + '</span></label>';
@@ -3707,10 +3744,11 @@ function changeWifi() {
 
 // --- Collection ---
 function loadSets() {
+  var tcg = getCardPluginContext();
   const el = document.getElementById('sets-list');
   el.innerHTML = '<div style="color:#6BCCBD;padding:16px;text-align:center">Loading sets...</div>';
-  fetch(API + '/api/sets').then(r => r.json()).then(sets => {
-    if (!sets.length) { el.innerHTML = '<div style="color:#6BCCBD;padding:16px;text-align:center">No cards downloaded yet.</div>'; return; }
+  fetch(API + '/api/sets?tcg=' + encodeURIComponent(tcg)).then(r => r.json()).then(sets => {
+    if (!sets.length) { el.innerHTML = '<div style="color:#6BCCBD;padding:16px;text-align:center">No ' + esc(tcg.toUpperCase()) + ' cards downloaded yet.</div>'; return; }
     el.innerHTML = sets.map(s => `
       <div class="set-item">
         <div class="set-header" onclick="toggleSet('${esc(s.id)}')">
@@ -3727,12 +3765,13 @@ function loadSets() {
 }
 
 function toggleSet(setId) {
+  var tcg = getCardPluginContext();
   const el = document.getElementById('set-' + setId);
   if (el.classList.contains('open')) { el.classList.remove('open'); return; }
   el.classList.add('open');
   if (el.dataset.loaded) return;
   el.innerHTML = '<div style="padding:8px;color:#6BCCBD;font-size:12px">Loading...</div>';
-  fetch(API + '/api/sets/' + setId + '/cards').then(r => r.json()).then(cards => {
+  fetch(API + '/api/sets/' + setId + '/cards?tcg=' + encodeURIComponent(tcg)).then(r => r.json()).then(cards => {
     el.dataset.loaded = '1';
     // Extract unique rarities for chips
     var rarities = [];
@@ -3758,7 +3797,7 @@ function toggleSet(setId) {
       <div class="card-row" data-rarity="${esc(c.rarity)}">
         <label>
           <input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleCard('${esc(c.id)}')">
-          <span class="card-preview-btn" data-set="${esc(c.set_id)}" data-card="${esc(c.id)}" data-label="${esc(c.name)} #${esc(c.number)}">#${esc(c.number)} ${esc(c.name)}</span>
+          <span class="card-preview-btn" data-set="${esc(c.set_id)}" data-card="${esc(c.id)}" data-tcg="${esc(tcg)}" data-label="${esc(c.name)} #${esc(c.number)}">#${esc(c.number)} ${esc(c.name)}</span>
         </label>
         <span class="card-rarity">${esc(c.rarity)}</span>
       </div>
@@ -3768,11 +3807,11 @@ function toggleSet(setId) {
 }
 
 function toggleCard(cardId) {
-  fetch(API + '/api/collection/toggle', {method:'POST', body: JSON.stringify({card_id: cardId})});
+  fetch(API + '/api/collection/toggle', {method:'POST', body: JSON.stringify({card_id: cardId, tcg: getCardPluginContext()})});
 }
 
 function toggleSetAll(setId, owned) {
-  fetch(API + '/api/collection/toggle_set', {method:'POST', body: JSON.stringify({set_id: setId, owned: owned})})
+  fetch(API + '/api/collection/toggle_set', {method:'POST', body: JSON.stringify({set_id: setId, owned: owned, tcg: getCardPluginContext()})})
     .then(() => {
       const el = document.getElementById('set-' + setId);
       el.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = owned);
@@ -3780,15 +3819,16 @@ function toggleSetAll(setId, owned) {
 }
 
 function clearCollection() {
-  if (!confirm('Clear your entire card list for the active TCG?')) return;
-  fetch(API + '/api/collection/clear', {method:'POST'}).then(() => { loadSets(); loadRarities(); });
+  var tcg = getCardPluginContext();
+  if (!confirm('Clear your entire saved card list for ' + tcg.toUpperCase() + '?')) return;
+  fetch(API + '/api/collection/clear', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tcg: tcg})}).then(() => { loadSets(); loadRarities(); });
 }
 
 // --- Rarity filtering ---
 var _rarityData = [];
 
 function loadRarities() {
-  fetch(API + '/api/rarities').then(function(r) { return r.json(); }).then(function(rarities) {
+  fetch(API + '/api/rarities?tcg=' + encodeURIComponent(getCardPluginContext())).then(function(r) { return r.json(); }).then(function(rarities) {
     _rarityData = rarities;
     renderRarityChips();
   });
@@ -3812,7 +3852,7 @@ function toggleRarityChip(chipEl, rarity, owned) {
   var resultEl = document.getElementById('rarity-result');
   resultEl.textContent = (owned ? 'Selecting' : 'Deselecting') + ' all ' + rarity + '...';
   chipEl.style.opacity = '0.5';
-  fetch(API + '/api/collection/toggle_rarity', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rarity: rarity, owned: owned})})
+  fetch(API + '/api/collection/toggle_rarity', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({rarity: rarity, owned: owned, tcg: getCardPluginContext()})})
     .then(function(r) { return r.json(); }).then(function(d) {
       resultEl.textContent = (owned ? 'Selected ' : 'Deselected ') + (d.count || 0) + ' ' + rarity + ' cards';
       showToast((owned ? 'Selected ' : 'Deselected ') + (d.count || 0) + ' cards');
@@ -3826,7 +3866,7 @@ function toggleRarityChip(chipEl, rarity, owned) {
 function selectAllRarities(owned) {
   var resultEl = document.getElementById('rarity-result');
   resultEl.textContent = (owned ? 'Selecting' : 'Deselecting') + ' all...';
-  fetch(API + '/api/collection/toggle_all', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({owned: owned})})
+  fetch(API + '/api/collection/toggle_all', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({owned: owned, tcg: getCardPluginContext()})})
     .then(function(r) { return r.json(); }).then(function(d) {
       resultEl.textContent = (owned ? 'Selected ' : 'Deselected ') + (d.count || 0) + ' cards';
       showToast((owned ? 'Selected ' : 'Deselected ') + (d.count || 0) + ' cards');
@@ -3838,7 +3878,7 @@ function selectAllRarities(owned) {
 
 function toggleSetRarityChip(chipEl, setId, rarity, owned) {
   chipEl.style.opacity = '0.5';
-  fetch(API + '/api/collection/toggle_rarity', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({set_id: setId, rarity: rarity, owned: owned})})
+  fetch(API + '/api/collection/toggle_rarity', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({set_id: setId, rarity: rarity, owned: owned, tcg: getCardPluginContext()})})
     .then(function(r) { return r.json(); }).then(function(d) {
       if (d.count !== undefined) {
         showToast((owned ? 'Selected ' : 'Deselected ') + d.count + ' ' + rarity + ' cards');
@@ -3894,7 +3934,7 @@ function debounceSearch() {
 }
 
 function loadFavorites() {
-  fetch(API + '/api/collection/favorites').then(function(r) { return r.json(); }).then(function(favs) {
+  fetch(API + '/api/collection/favorites?tcg=' + encodeURIComponent(getCardPluginContext())).then(function(r) { return r.json(); }).then(function(favs) {
     var el = document.getElementById('search-filters');
     if (!favs.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
     el.style.display = 'flex';
@@ -3908,7 +3948,7 @@ function loadFavorites() {
 function removeFavorite(name, e) {
   var chip = e.target.parentElement;
   chip.style.opacity = '0.5';
-  fetch(API + '/api/collection/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: name, owned: false})})
+  fetch(API + '/api/collection/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: name, owned: false, tcg: getCardPluginContext()})})
     .then(function(r) { return r.json(); }).then(function(d) {
       showToast('Removed ' + (d.count || 0) + ' ' + name + ' cards');
       loadFavorites();
@@ -3922,7 +3962,7 @@ function doSearch() {
   var el = document.getElementById('search-results');
   if (q.length < 2) { el.innerHTML = ''; return; }
   el.innerHTML = '<div style="color:#6BCCBD;font-size:12px;padding:8px">Searching...</div>';
-  fetch(API + '/api/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(data) {
+  fetch(API + '/api/search?q=' + encodeURIComponent(q) + '&tcg=' + encodeURIComponent(getCardPluginContext())).then(function(r) { return r.json(); }).then(function(data) {
     var results = data.results;
     if (!results.length) { el.innerHTML = '<div style="color:#6BCCBD;font-size:12px;padding:8px">No results found (searched ' + data.sets_searched + ' sets)</div>'; return; }
     var groups = {};
@@ -3947,7 +3987,7 @@ function doSearch() {
       g.cards.forEach(function(c) {
         html += '<div class="search-result"><label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer">';
         html += '<input type="checkbox" ' + (c.owned ? 'checked' : '') + ' onchange="toggleCard(\\'' + esc(c.id) + '\\')" style="accent-color:#36A5CA">';
-        html += '<span><span class="card-preview-btn" data-set="' + esc(c.set_id) + '" data-card="' + esc(c.id) + '" data-label="' + esc(c.name) + ' #' + esc(c.number) + '">#' + esc(c.number) + '</span>';
+        html += '<span><span class="card-preview-btn" data-set="' + esc(c.set_id) + '" data-card="' + esc(c.id) + '" data-tcg="' + esc(getCardPluginContext()) + '" data-label="' + esc(c.name) + ' #' + esc(c.number) + '">#' + esc(c.number) + '</span>';
         html += ' <span class="search-result-set">' + esc(c.set_name) + '</span></span>';
         html += '</label><span class="search-result-rarity">' + esc(c.rarity) + '</span></div>';
       });
@@ -3960,7 +4000,7 @@ function doSearch() {
 function toggleSearchGroup(btn, name, owned) {
   btn.disabled = true;
   btn.textContent = owned ? 'Adding...' : 'Removing...';
-  fetch(API + '/api/collection/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: name, owned: owned})})
+  fetch(API + '/api/collection/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: name, owned: owned, tcg: getCardPluginContext()})})
     .then(function(r) { return r.json(); }).then(function(d) {
       showToast((owned ? 'Added ' : 'Removed ') + (d.count || 0) + ' ' + name + ' cards');
       loadFavorites();
@@ -4362,15 +4402,20 @@ function loadDlButtons() {
   var dlEl = document.getElementById('dl-buttons');
   if (!dlEl || !Object.keys(_tcgRegistry).length) return;
   var storageInfo = _storageInfo || {};
-  dlEl.innerHTML = Object.entries(_tcgRegistry).filter(function(e) { return e[1].download_script; }).map(function(e) {
-    var tcgKey = e[0], tcgName = e[1].name;
-    var existingCount = (storageInfo[tcgKey] && storageInfo[tcgKey].card_count) || 0;
-    var btnLabel = existingCount > 0 ? 'Update ' + tcgName + ' (' + existingCount.toLocaleString() + ' cards already downloaded)' : 'Download ' + tcgName;
-    return '<div style="margin-bottom:6px"><button class="btn btn-primary btn-block" onclick="startDownload(\\'' + tcgKey + '\\')">'+btnLabel+'</button></div>';
-  }).join('');
+  var selectedTcg = getCardPluginContext();
+  var selectedInfo = _tcgRegistry[selectedTcg];
+  if (selectedInfo && selectedInfo.download_script) {
+    var existingCount = (storageInfo[selectedTcg] && storageInfo[selectedTcg].card_count) || 0;
+    var btnLabel = existingCount > 0
+      ? 'Update ' + selectedInfo.name + ' (' + existingCount.toLocaleString() + ' cards already downloaded)'
+      : 'Download ' + selectedInfo.name;
+    dlEl.innerHTML = '<div style="margin-bottom:6px"><button class="btn btn-primary btn-block" onclick="startDownload(\\'' + selectedTcg + '\\')">' + btnLabel + '</button></div>';
+  } else {
+    dlEl.innerHTML = '<div style="color:#6BCCBD;font-size:12px">This card plugin does not have a download helper yet.</div>';
+  }
   // MTG since-year filter
   var mtgSince = document.getElementById('dl-mtg-since');
-  if (mtgSince) mtgSince.style.display = _tcgRegistry.mtg ? 'block' : 'none';
+  if (mtgSince) mtgSince.style.display = selectedTcg === 'mtg' && _tcgRegistry.mtg ? 'block' : 'none';
   // Delete source selector
   var delSel = document.getElementById('delete-source');
   if (delSel) {
@@ -4380,13 +4425,21 @@ function loadDlButtons() {
     delSel.innerHTML = deleteEntries.map(function(entry) {
       return '<option value="' + entry[0] + '">' + entry[1].name + '</option>';
     }).join('');
-    delSel.onchange = updateDeleteSourceUI;
+    delSel.value = selectedTcg;
+    delSel.onchange = function() { setCardPluginContext(delSel.value, 'sources'); };
     updateDeleteSourceUI();
   }
 }
 
 function buildDynamicUI(registry) {
   _tcgRegistry = registry;
+  var savedContext = localStorage.getItem('inkslab_card_plugin');
+  if (savedContext && registry[savedContext]) {
+    _cardPluginContext = savedContext;
+  } else {
+    var registryKeys = Object.keys(registry);
+    _cardPluginContext = registryKeys[0] || 'pokemon';
+  }
   // Quick Switch buttons
   var qsEl = document.getElementById('quick-switch-btns');
   qsEl.innerHTML = Object.entries(registry).map(function(e) {
@@ -4397,6 +4450,14 @@ function buildDynamicUI(registry) {
   sel.innerHTML = Object.entries(registry).map(function(e) {
     return '<option value="' + e[0] + '">' + e[1].name + '</option>';
   }).join('');
+  ['cards-tcg-select', 'sources-tcg-select'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = Object.entries(registry).map(function(e) {
+      return '<option value="' + e[0] + '">' + e[1].name + '</option>';
+    }).join('');
+    if (registry[_cardPluginContext]) el.value = _cardPluginContext;
+  });
   // Download and delete buttons
   loadDlButtons();
 }
