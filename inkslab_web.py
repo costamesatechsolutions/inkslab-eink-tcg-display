@@ -161,6 +161,30 @@ def _write_status(data):
     except Exception:
         pass
 
+
+def _read_status():
+    """Read the current status JSON defensively."""
+    if not os.path.exists(STATUS_FILE):
+        return {}
+    try:
+        with open(STATUS_FILE, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _manual_control_block_reason():
+    """Return a user-facing reason if manual controls should be blocked."""
+    status = _read_status()
+    pending = str(status.get('pending') or '').strip().lower()
+    if pending.startswith('starting up'):
+        return "InkSlab is still starting up. Give it a moment, then try again."
+    if pending.startswith('updating display plan'):
+        return "InkSlab is applying a display plan change. Try again in a moment."
+    if status.get('display_updating') and not status.get('card_path'):
+        return "InkSlab is still preparing the display. Try again in a moment."
+    return None
+
 # --- TTL CACHE (avoids re-walking 15,000+ files on every request) ---
 _cache = {}
 _cache_lock = threading.Lock()
@@ -300,13 +324,7 @@ def get_local_ip():
 
 @app.route('/api/status')
 def api_status():
-    status = {}
-    if os.path.exists(STATUS_FILE):
-        try:
-            with open(STATUS_FILE, 'r') as f:
-                status = json.load(f)
-        except Exception:
-            pass
+    status = _read_status()
     # Auto-clear stale flags (e.g. if daemon crashed mid-update)
     if status.get('pending') and time.time() - status.get('timestamp', 0) > 60:
         status.pop('pending', None)
@@ -379,6 +397,9 @@ def api_set_config():
     except (ValueError, TypeError):
         return jsonify({"error": "invalid value"}), 400
     if 'active_tcg' in updates:
+        blocked = _manual_control_block_reason()
+        if blocked:
+            return jsonify({"error": blocked}), 409
         updates['active_tcg'] = normalize_active_plugin(updates['active_tcg'])
         updates['single_plugin'] = updates['active_tcg']
     if 'slab_header_mode' in updates:
@@ -421,6 +442,9 @@ def api_set_config():
 
 @app.route('/api/next', methods=['POST'])
 def api_next():
+    blocked = _manual_control_block_reason()
+    if blocked:
+        return jsonify({"ok": False, "error": blocked}), 409
     try:
         with open(NEXT_TRIGGER, 'w') as f:
             f.write('1')
@@ -443,6 +467,9 @@ def api_next():
 
 @app.route('/api/prev', methods=['POST'])
 def api_prev():
+    blocked = _manual_control_block_reason()
+    if blocked:
+        return jsonify({"ok": False, "error": blocked}), 409
     try:
         with open(PREV_TRIGGER, 'w') as f:
             f.write('1')
@@ -2963,8 +2990,15 @@ function refreshStatus() {
     // Update pause button and countdown
     updatePauseBtn(d.paused);
     updateCountdown();
-    // Disable prev button if no history
-    document.getElementById('btn-prev').disabled = !(d.prev_cards && d.prev_cards.length);
+    var startupBlocked = !!(d.pending && String(d.pending).toLowerCase().indexOf('starting up') === 0);
+    var controlsBlocked = startupBlocked || (!!d.display_updating && !d.card_path);
+    var nextBtn = document.getElementById('btn-next');
+    var prevBtn = document.getElementById('btn-prev');
+    var pauseBtn = document.getElementById('btn-pause');
+    if (nextBtn) nextBtn.disabled = controlsBlocked;
+    if (pauseBtn) pauseBtn.disabled = controlsBlocked;
+    // Disable prev button if no history or if startup/display prep is still in progress
+    if (prevBtn) prevBtn.disabled = controlsBlocked || !(d.prev_cards && d.prev_cards.length);
     // Stop rapid polling once fully settled (not pending AND not updating display)
     if (_rapidPoll && !d.pending && !d.display_updating) {
       clearInterval(_rapidPoll);
@@ -3006,8 +3040,10 @@ function nextCard() {
   var btn = document.getElementById('btn-next');
   btn.disabled = true;
   fetch(API + '/api/next', {method:'POST'})
-    .then(function() {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
       btn.disabled = false;
+      if (d && d.ok === false) { showToast(d.error || 'Not ready yet'); return; }
       showToast('Next card...');
       setOptimisticLoading('Loading next card...');
       startRapidPoll();
@@ -3019,8 +3055,10 @@ function prevCard() {
   var btn = document.getElementById('btn-prev');
   btn.disabled = true;
   fetch(API + '/api/prev', {method:'POST'})
-    .then(function() {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
       btn.disabled = false;
+      if (d && d.ok === false) { showToast(d.error || 'Not ready yet'); return; }
       showToast('Previous card...');
       setOptimisticLoading('Loading previous card...');
       startRapidPoll();
@@ -3048,9 +3086,11 @@ function switchTCG(tcg, activeBtn) {
   activeBtn.textContent = 'Switching...';
   fetch(API + '/api/config', {method:'POST', body: JSON.stringify({active_tcg: tcg}),
     headers:{'Content-Type':'application/json'}})
-    .then(function() {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
       activeBtn.textContent = orig;
       btns.forEach(function(b) { b.disabled = false; });
+      if (d && d.error) { showToast(d.error || 'Switch failed'); return; }
       var name = (_tcgRegistry[tcg] && _tcgRegistry[tcg].name) || tcg.toUpperCase();
       showToast('Switching to ' + name + '...');
       document.getElementById('st-tcg').textContent = name;
