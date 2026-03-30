@@ -108,6 +108,19 @@ def _refresh_plugin_registry():
     }
     TCG_LIBRARIES = get_card_libraries()
 
+
+def _current_tcg_libraries():
+    return get_card_libraries()
+
+
+def _custom_card_path():
+    return get_card_libraries().get("custom", os.path.join("/home/pi", "custom_cards"))
+
+
+@app.before_request
+def _refresh_dynamic_plugin_state():
+    _refresh_plugin_registry()
+
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
 DEFAULTS = WEB_DEFAULTS
@@ -540,7 +553,7 @@ def api_current_card_image():
 @app.route('/api/card_image/<tcg>/<set_id>/<card_id>')
 def api_card_image(tcg, set_id, card_id):
     """Serve a specific card image on demand."""
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library:
         return '', 404
     # Sanitize to prevent path traversal
@@ -767,7 +780,7 @@ def api_set_display_plan():
 def api_sets():
     config = load_config()
     tcg = request.args.get('tcg', config['active_tcg'])
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library or not os.path.exists(library):
         return jsonify([])
 
@@ -840,7 +853,7 @@ def api_sets():
 def api_set_cards(set_id):
     config = load_config()
     tcg = request.args.get('tcg', config['active_tcg'])
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library:
         return jsonify([])
 
@@ -920,7 +933,7 @@ def api_collection_toggle_set():
 
     config = load_config()
     tcg = data.get("tcg", config["active_tcg"])
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library:
         return jsonify({"error": "invalid tcg"}), 400
 
@@ -974,7 +987,7 @@ def api_rarities():
     if cached:
         return jsonify(cached)
 
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     rarity_counts = {}
     collection = load_collection()
     owned_ids = set(collection.get(tcg, []))
@@ -1022,7 +1035,7 @@ def api_collection_toggle_all():
     owned = body.get("owned", True)
     config = load_config()
     tcg = body.get("tcg", config["active_tcg"])
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library or not os.path.isdir(library):
         return jsonify({"error": "invalid tcg"}), 400
 
@@ -1100,7 +1113,7 @@ def api_collection_toggle_rarity():
 
     config = load_config()
     tcg = body.get("tcg", config["active_tcg"])
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library or not os.path.isdir(library):
         return jsonify({"error": "invalid tcg or no data"}), 400
 
@@ -1153,7 +1166,7 @@ def api_search():
 
     config = load_config()
     tcg = request.args.get('tcg', config['active_tcg'])
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     if not library or not os.path.isdir(library):
         return jsonify([])
 
@@ -1234,7 +1247,7 @@ def api_favorites_set():
     tcg = body.get("tcg", config["active_tcg"])
 
     # Find matching card IDs (read-only, outside lock)
-    library = TCG_LIBRARIES.get(tcg)
+    library = _current_tcg_libraries().get(tcg)
     matching_ids = []
     if library and os.path.isdir(library):
         for d in os.listdir(library):
@@ -1490,7 +1503,7 @@ def api_delete():
         if _download_proc and _download_proc.poll() is None and _download_tcg == tcg:
             return jsonify({"ok": False, "error": "Stop the current download before deleting this TCG."}), 409
 
-    path = TCG_LIBRARIES[tcg]
+    path = _current_tcg_libraries()[tcg]
     if os.path.exists(path):
         try:
             shutil.rmtree(path)
@@ -1890,24 +1903,23 @@ def captive_portal_detect():
 
 # --- CUSTOM IMAGE MANAGEMENT ---
 
-CUSTOM_PATH = TCG_LIBRARIES["custom"]
-
 @app.route('/api/custom/folders')
 def api_custom_folders():
     """List custom image folders with card counts."""
-    if not os.path.exists(CUSTOM_PATH):
+    custom_path = _custom_card_path()
+    if not os.path.exists(custom_path):
         return jsonify([])
     folders = []
     master = {}
-    idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
+    idx_path = os.path.join(custom_path, "master_index.json")
     if os.path.exists(idx_path):
         try:
             with open(idx_path, 'r') as f:
                 master = json.load(f)
         except Exception:
             pass
-    for d in sorted(os.listdir(CUSTOM_PATH)):
-        dp = os.path.join(CUSTOM_PATH, d)
+    for d in sorted(os.listdir(custom_path)):
+        dp = os.path.join(custom_path, d)
         if not os.path.isdir(dp):
             continue
         count = sum(1 for f in os.listdir(dp) if _is_card_image(f))
@@ -1931,14 +1943,15 @@ def api_custom_create_folder():
     safe = safe.replace(' ', '_').lower()
     if not safe:
         return jsonify({"error": "invalid name"}), 400
-    folder = os.path.join(CUSTOM_PATH, safe)
+    custom_path = _custom_card_path()
+    folder = os.path.join(custom_path, safe)
     try:
         os.makedirs(folder, exist_ok=True)
     except OSError as e:
         return jsonify({"error": f"Cannot create folder: {e}"}), 500
     # Update master_index
     with _custom_lock:
-        idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
+        idx_path = os.path.join(custom_path, "master_index.json")
         master = {}
         if os.path.exists(idx_path):
             try:
@@ -1962,8 +1975,9 @@ def api_custom_rename_folder():
     new_name = data.get("name", "").strip()
     if not folder_id or not new_name:
         return jsonify({"error": "id and name required"}), 400
+    custom_path = _custom_card_path()
     with _custom_lock:
-        idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
+        idx_path = os.path.join(custom_path, "master_index.json")
         master = {}
         if os.path.exists(idx_path):
             try:
@@ -1984,10 +1998,11 @@ def api_custom_rename_folder():
 def api_custom_delete_folder(name):
     """Delete an entire custom folder."""
     safe = os.path.basename(name)
-    folder = os.path.join(CUSTOM_PATH, safe)
+    custom_path = _custom_card_path()
+    folder = os.path.join(custom_path, safe)
     with _custom_lock:
         # Update index FIRST so daemon won't try to read deleted folder
-        idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
+        idx_path = os.path.join(custom_path, "master_index.json")
         if os.path.exists(idx_path):
             try:
                 with open(idx_path, 'r') as f:
@@ -2008,7 +2023,7 @@ def api_custom_delete_card(folder, card_id):
     """Delete a single card from a custom folder."""
     safe_folder = os.path.basename(folder)
     safe_card = os.path.basename(card_id)
-    folder_path = os.path.join(CUSTOM_PATH, safe_folder)
+    folder_path = os.path.join(_custom_card_path(), safe_folder)
     with _custom_lock:
         # Update metadata first
         data_file = os.path.join(folder_path, "_data.json")
@@ -2039,7 +2054,7 @@ def api_custom_upload():
     if not folder_id:
         return jsonify({"error": "folder required"}), 400
     safe_folder = os.path.basename(folder_id)
-    folder_path = os.path.join(CUSTOM_PATH, safe_folder)
+    folder_path = os.path.join(_custom_card_path(), safe_folder)
     if not os.path.isdir(folder_path):
         return jsonify({"error": "folder not found"}), 404
     if not _has_disk_space():
@@ -2107,7 +2122,7 @@ def api_custom_card_metadata():
     if not folder_id or not card_id:
         return jsonify({"error": "folder and card_id required"}), 400
     safe_folder = os.path.basename(folder_id)
-    folder_path = os.path.join(CUSTOM_PATH, safe_folder)
+    folder_path = os.path.join(_custom_card_path(), safe_folder)
     if not os.path.isdir(folder_path):
         return jsonify({"error": "folder not found"}), 404
     data_file = os.path.join(folder_path, "_data.json")
@@ -2140,7 +2155,7 @@ def api_custom_set_metadata():
     folder_id = data.get("id", "")
     if not folder_id:
         return jsonify({"error": "id required"}), 400
-    idx_path = os.path.join(CUSTOM_PATH, "master_index.json")
+    idx_path = os.path.join(_custom_card_path(), "master_index.json")
     with _custom_lock:
         master = {}
         if os.path.exists(idx_path):

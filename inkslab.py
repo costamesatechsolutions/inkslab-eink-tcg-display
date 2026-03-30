@@ -65,6 +65,16 @@ DEFAULTS = {
 
 TCG_LIBRARIES = get_card_libraries()
 
+
+def current_card_libraries():
+    return get_card_libraries()
+
+
+def current_library_dir(plugin_id, fallback="pokemon"):
+    libraries = current_card_libraries()
+    fallback_dir = libraries.get(fallback) or next(iter(libraries.values()))
+    return libraries.get(plugin_id, fallback_dir)
+
 # Supported image formats
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
 
@@ -1194,7 +1204,7 @@ def main():
 
     config = load_config()
     active_tcg = config["active_tcg"]
-    library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+    library_dir = current_library_dir(active_tcg)
     master_index = load_master_index(library_dir)
 
     # Load collection if collection mode is on
@@ -1345,7 +1355,7 @@ def main():
     # made during boot are applied before the first real card loop begins.
     config = load_config()
     active_tcg = config["active_tcg"]
-    library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+    library_dir = current_library_dir(active_tcg)
     master_index = load_master_index(library_dir)
     if config["collection_only"]:
         loaded = load_collection(active_tcg)
@@ -1361,7 +1371,7 @@ def main():
         old_history = deck.history if preserve_history else []
         active_tcg = config["active_tcg"]
         _deck_collection_only = config["collection_only"]
-        library_dir = TCG_LIBRARIES.get(active_tcg, TCG_LIBRARIES["pokemon"])
+        library_dir = current_library_dir(active_tcg)
         master_index = load_master_index(library_dir)
         if config["collection_only"]:
             loaded = load_collection(active_tcg)
@@ -1376,7 +1386,8 @@ def main():
     # If cards are deleted mid-operation, falls back to no-cards screen
     try:
         while not _shutdown:
-            if active_tcg not in TCG_LIBRARIES:
+            current_libraries = current_card_libraries()
+            if active_tcg not in current_libraries:
                 logger.info("Displaying: %s", active_tcg)
                 plugin_canvas, plugin_payload = render_runtime_plugin(active_tcg, config)
                 if not plugin_canvas or not plugin_payload:
@@ -1393,7 +1404,7 @@ def main():
                     })
                     config, _ = wait_with_polling(60)
                     active_tcg = config["active_tcg"]
-                    if active_tcg in TCG_LIBRARIES:
+                    if active_tcg in current_card_libraries():
                         rebuild_deck()
                     continue
 
@@ -1414,7 +1425,7 @@ def main():
                     })
                     config, _ = wait_with_polling(60)
                     active_tcg = config["active_tcg"]
-                    if active_tcg in TCG_LIBRARIES:
+                    if active_tcg in current_card_libraries():
                         rebuild_deck()
                     continue
 
@@ -1490,7 +1501,7 @@ def main():
                     break
 
                 active_tcg = config["active_tcg"]
-                if active_tcg in TCG_LIBRARIES:
+                if active_tcg in current_card_libraries():
                     rebuild_deck()
                 continue
 
@@ -1540,7 +1551,7 @@ def main():
                     continue
 
                 new_tcg = config["active_tcg"]
-                if new_tcg not in TCG_LIBRARIES:
+                if new_tcg not in current_card_libraries():
                     active_tcg = new_tcg
                     break
                 if (new_tcg != active_tcg
@@ -1553,7 +1564,7 @@ def main():
 
             if _shutdown:
                 break
-            if active_tcg not in TCG_LIBRARIES:
+            if active_tcg not in current_card_libraries():
                 continue
 
             # Card display loop — runs until cards run out or shutdown
@@ -1815,7 +1826,7 @@ def main():
 
                 # If TCG or collection mode changed, rebuild and advance to new card
                 new_tcg = config["active_tcg"]
-                if new_tcg not in TCG_LIBRARIES:
+                if new_tcg not in current_card_libraries():
                     active_tcg = new_tcg
                     break
                 needs_rebuild = (new_tcg != active_tcg
