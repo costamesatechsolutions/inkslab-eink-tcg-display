@@ -84,12 +84,21 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         accent_color="#5AA9E6",
         description="Ambient weather snapshot for e-ink dashboards.",
         builtin=True,
-        runtime_enabled=False,
+        runtime_enabled=True,
         settings_keys=["location_name", "weather_units", "weather_refresh_minutes"],
         config_schema=[
-            {"key": "location_name", "label": "Location", "type": "text"},
-            {"key": "weather_units", "label": "Units", "type": "select"},
-            {"key": "weather_refresh_minutes", "label": "Refresh Minutes", "type": "number"},
+            {"key": "location_name", "label": "Location", "type": "text", "default": ""},
+            {
+                "key": "weather_units",
+                "label": "Units",
+                "type": "select",
+                "default": "imperial",
+                "options": [
+                    {"value": "imperial", "label": "Imperial"},
+                    {"value": "metric", "label": "Metric"},
+                ],
+            },
+            {"key": "weather_refresh_minutes", "label": "Refresh Minutes", "type": "number", "default": 30},
         ],
     ),
     "news": PluginDefinition(
@@ -358,7 +367,9 @@ def get_runtime_plugin_ids() -> List[str]:
 
 def default_enabled_plugins(default_plugin: str = "pokemon") -> List[str]:
     """Return the default runnable plugin set for new configs."""
-    runtime_ids = get_runtime_plugin_ids()
+    runtime_plugins = get_runtime_plugins()
+    preferred_ids = [plugin_id for plugin_id, plugin in runtime_plugins.items() if plugin.kind == "tcg"]
+    runtime_ids = preferred_ids or list(runtime_plugins.keys())
     if default_plugin in runtime_ids:
         return [default_plugin] + [plugin_id for plugin_id in runtime_ids if plugin_id != default_plugin]
     return runtime_ids or ["pokemon"]

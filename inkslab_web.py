@@ -48,6 +48,11 @@ from inkslab_plugins import (
     normalize_enabled_plugins,
     normalize_active_plugin,
 )
+from inkslab_display_plan import (
+    build_simple_display_plan,
+    infer_display_style,
+    infer_rotation_minutes,
+)
 from inkslab_update_helpers import (
     configure_git_safe_directory,
     git_current_branch,
@@ -269,6 +274,7 @@ def api_status():
             status['server_time'] = time.strftime("%-I:%M %p")
     else:
         status['server_time'] = time.strftime("%-I:%M %p")
+    status['plugin_kind'] = 'tcg' if config.get("active_tcg") in TCG_LIBRARIES else str(config.get("active_tcg") or '')
     return jsonify(status)
 
 
@@ -578,9 +584,16 @@ def api_set_plugin_config():
 def api_display_plan():
     """Return the experimental display planning config."""
     config = load_config()
+    display_style = infer_display_style(
+        config["display_mode"],
+        config["display_schedule"],
+        config["enabled_plugins"],
+    )
     return jsonify({
         "enabled_plugins": config["enabled_plugins"],
         "display_mode": config["display_mode"],
+        "display_style": display_style,
+        "display_rotation_minutes": infer_rotation_minutes(config["display_schedule"]),
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
         "active_plugin": config["active_plugin"],
@@ -594,17 +607,27 @@ def api_set_display_plan():
     body = request.get_json(force=True)
     if not isinstance(body, dict):
         return jsonify({"error": "invalid request"}), 400
-    updates = {}
-    if 'display_mode' in body:
-        updates['display_mode'] = body.get('display_mode')
-    if 'single_plugin' in body:
-        updates['single_plugin'] = body.get('single_plugin')
-        updates['active_tcg'] = body.get('single_plugin')
-    if 'display_schedule' in body:
-        updates['display_schedule'] = body.get('display_schedule')
 
     with _config_lock:
         config = load_config()
+        updates = {}
+        display_style = str(body.get('display_style') or '').strip().lower()
+        if 'single_plugin' in body:
+            updates['single_plugin'] = body.get('single_plugin')
+            updates['active_tcg'] = body.get('single_plugin')
+        if display_style in ('single', 'rotate_all_day'):
+            simple_plan = build_simple_display_plan(
+                display_style,
+                body.get('single_plugin') or config.get('single_plugin'),
+                config.get('enabled_plugins'),
+                body.get('display_rotation_minutes', 10),
+            )
+            updates.update(simple_plan)
+        else:
+            if 'display_mode' in body:
+                updates['display_mode'] = body.get('display_mode')
+            if 'display_schedule' in body:
+                updates['display_schedule'] = body.get('display_schedule')
         config.update(updates)
         config = normalize_display_config(config)
         save_config(config)
@@ -630,6 +653,12 @@ def api_set_display_plan():
     return jsonify({
         "ok": True,
         "display_mode": config["display_mode"],
+        "display_style": infer_display_style(
+            config["display_mode"],
+            config["display_schedule"],
+            config["enabled_plugins"],
+        ),
+        "display_rotation_minutes": infer_rotation_minutes(config["display_schedule"]),
         "single_plugin": config["single_plugin"],
         "display_schedule": config["display_schedule"],
         "active_plugin": config["active_plugin"],
@@ -2584,26 +2613,35 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     </div>
     <div class="card">
       <h3>Display Plan</h3>
-      <p class="context-note">Choose whether the screen stays on one plugin or rotates through a calm schedule like cards, weather, and news.</p>
+      <p class="context-note">Choose a simple display style first. Most people should never need the advanced schedule editor unless they want very specific time blocks.</p>
       <div id="display-plan-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading display plan...</div>
       <div id="display-plan-list" class="schedule-list"></div>
       <div class="form-group" style="margin-top:12px">
-        <label>Display Mode</label>
-        <select id="display-mode">
-          <option value="single">Single Plugin</option>
-          <option value="schedule">Scheduled Rotation</option>
+        <label>Easy Display Style</label>
+        <select id="display-style" onchange="syncDisplayPlanMode()">
+          <option value="single">Stay On One Plugin</option>
+          <option value="rotate_all_day">Rotate Enabled Plugins All Day</option>
+          <option value="custom">Custom Schedule</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Single Plugin</label>
+        <label>Default / Single Plugin</label>
         <select id="single-plugin"></select>
       </div>
-      <div class="flex-row" style="margin-bottom:8px">
-        <button class="btn btn-secondary btn-block" onclick="addDisplayPlanBlock()">Add Time Block</button>
-        <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
+      <div class="form-group" id="display-rotation-group">
+        <label>Rotation Minutes</label>
+        <input type="number" id="display-rotation-minutes" min="1" max="1440" value="10">
+        <div class="subtle-note">Used by the simple all-day rotation mode and as the starting point for custom schedules.</div>
       </div>
-      <div id="display-plan-editor" class="schedule-editor"></div>
-      <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">The scheduler already understands rotation. As more plugins become runnable, this is where the dashboard starts feeling truly modular.</p>
+      <div id="display-plan-advanced">
+        <div class="flex-row" style="margin-bottom:8px">
+          <button class="btn btn-secondary btn-block" onclick="addDisplayPlanBlock()">Add Time Block</button>
+          <button class="btn btn-primary btn-block" onclick="saveDisplayPlan()">Save Display Plan</button>
+        </div>
+        <div id="display-plan-editor" class="schedule-editor"></div>
+        <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Custom mode is here when you want full control, but the easy modes above should cover the normal setup path.</p>
+      </div>
+      <button class="btn btn-primary btn-block" id="display-plan-save-simple" onclick="saveDisplayPlan()">Save Display Plan</button>
     </div>
   </div>
 
@@ -2970,7 +3008,8 @@ function refreshStatus() {
     updatePauseBtn(d.paused);
     updateCountdown();
     var startupBlocked = !!(d.pending && String(d.pending).toLowerCase().indexOf('starting up') === 0);
-    var controlsBlocked = startupBlocked || (!!d.display_updating && !d.card_path);
+    var nonCardPlugin = d.plugin_kind && d.plugin_kind !== 'tcg';
+    var controlsBlocked = startupBlocked || (!!d.display_updating && !d.card_path) || nonCardPlugin;
     var nextBtn = document.getElementById('btn-next');
     var prevBtn = document.getElementById('btn-prev');
     var pauseBtn = document.getElementById('btn-pause');
@@ -3352,16 +3391,28 @@ function savePluginConfig() {
 
 var _displayPlanState = null;
 
+function syncDisplayPlanMode() {
+  var styleEl = document.getElementById('display-style');
+  var rotationGroup = document.getElementById('display-rotation-group');
+  var advanced = document.getElementById('display-plan-advanced');
+  var saveSimple = document.getElementById('display-plan-save-simple');
+  if (!styleEl) return;
+  var style = styleEl.value || 'single';
+  if (rotationGroup) rotationGroup.style.display = style === 'single' ? 'none' : 'block';
+  if (advanced) advanced.style.display = style === 'custom' ? 'block' : 'none';
+  if (saveSimple) saveSimple.style.display = style === 'custom' ? 'none' : 'block';
+}
+
 function loadDisplayPlan() {
   fetch(API + '/api/display_plan').then(r => r.json()).then(function(d) {
     _displayPlanState = d;
     var summaryEl = document.getElementById('display-plan-summary');
     var listEl = document.getElementById('display-plan-list');
     var modeNoteEl = document.getElementById('display-mode-note');
-    var modeEl = document.getElementById('display-mode');
     var singleEl = document.getElementById('single-plugin');
     if (!summaryEl || !listEl) return;
     var mode = d.display_mode || 'single';
+    var style = d.display_style || (mode === 'single' ? 'single' : 'custom');
     var schedule = d.display_schedule || [];
     var plugins = d.plugins || {};
     var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
@@ -3369,7 +3420,10 @@ function loadDisplayPlan() {
       return enabledPlugins.indexOf(entry[0]) !== -1 && entry[1] && entry[1].runtime_enabled;
     }));
     _displayPlanState.selectable_plugins = selectablePlugins;
-    if (modeEl) modeEl.value = mode;
+    var styleEl = document.getElementById('display-style');
+    var rotationEl = document.getElementById('display-rotation-minutes');
+    if (styleEl) styleEl.value = style;
+    if (rotationEl) rotationEl.value = d.display_rotation_minutes || 10;
     if (singleEl) {
       singleEl.innerHTML = Object.entries(selectablePlugins).map(function(entry) {
         return '<option value="' + entry[0] + '">' + esc((entry[1] && entry[1].name) || entry[0]) + '</option>';
@@ -3379,11 +3433,14 @@ function loadDisplayPlan() {
       }
       singleEl.value = d.single_plugin || d.active_plugin || 'pokemon';
     }
-    if (mode === 'schedule') {
-      summaryEl.textContent = 'Schedule mode is enabled. Active right now: ' + (d.active_plugin || '-') + '.';
-      if (modeNoteEl) modeNoteEl.textContent = 'This device is following a saved schedule. Active right now: ' + (d.active_plugin || '-') + '.';
+    if (style === 'rotate_all_day') {
+      summaryEl.textContent = 'Easy mode: enabled plugins rotate all day. Active right now: ' + (d.active_plugin || '-') + '.';
+      if (modeNoteEl) modeNoteEl.textContent = 'This device is rotating enabled plugins throughout the day. Active right now: ' + (d.active_plugin || '-') + '.';
+    } else if (style === 'custom') {
+      summaryEl.textContent = 'Custom schedule mode is enabled. Active right now: ' + (d.active_plugin || '-') + '.';
+      if (modeNoteEl) modeNoteEl.textContent = 'This device is following a custom schedule. Active right now: ' + (d.active_plugin || '-') + '.';
     } else {
-      summaryEl.textContent = 'Single mode is active. Current plugin: ' + (d.single_plugin || d.active_plugin || '-');
+      summaryEl.textContent = 'Easy mode: stay on one plugin. Current plugin: ' + (d.single_plugin || d.active_plugin || '-');
       if (modeNoteEl) modeNoteEl.textContent = 'This device stays on one plugin until the display plan changes. Current plugin: ' + (d.single_plugin || d.active_plugin || '-') + '.';
     }
     listEl.innerHTML = schedule.map(function(item) {
@@ -3401,6 +3458,7 @@ function loadDisplayPlan() {
       '</div>';
     }).join('');
     renderDisplayPlanEditor(schedule, selectablePlugins);
+    syncDisplayPlanMode();
     syncModularUI();
   }).catch(function() {
     var summaryEl = document.getElementById('display-plan-summary');
@@ -3438,11 +3496,12 @@ function renderDisplayPlanEditor(schedule, plugins) {
 function addDisplayPlanBlock() {
   if (!_displayPlanState) return;
   var schedule = Array.isArray(_displayPlanState.display_schedule) ? _displayPlanState.display_schedule.slice() : [];
+  var rotationEl = document.getElementById('display-rotation-minutes');
   schedule.push({
     label: 'New Block',
     start_hour: 8,
     end_hour: 12,
-    rotation_minutes: 10,
+    rotation_minutes: rotationEl ? (parseInt(rotationEl.value, 10) || 10) : 10,
     enabled: true,
     plugin_ids: [_displayPlanState.single_plugin || _displayPlanState.active_plugin || 'pokemon']
   });
@@ -3475,12 +3534,15 @@ function collectDisplayPlanSchedule() {
 }
 
 function saveDisplayPlan() {
-  var mode = document.getElementById('display-mode').value || 'single';
+  var style = document.getElementById('display-style').value || 'single';
   var singlePlugin = document.getElementById('single-plugin').value || 'pokemon';
+  var rotationMinutes = parseInt(document.getElementById('display-rotation-minutes').value, 10) || 10;
   var body = {
-    display_mode: mode,
+    display_style: style,
     single_plugin: singlePlugin,
-    display_schedule: collectDisplayPlanSchedule()
+    display_mode: style === 'custom' ? 'schedule' : (style === 'rotate_all_day' ? 'schedule' : 'single'),
+    display_rotation_minutes: rotationMinutes,
+    display_schedule: style === 'custom' ? collectDisplayPlanSchedule() : []
   };
   fetch(API + '/api/display_plan', {
     method:'POST',

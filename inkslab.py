@@ -21,6 +21,7 @@ import logging
 import signal
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
 import wifi_manager
+from inkslab_display_plan import resolve_display_wait
 from inkslab_plugins import default_enabled_plugins, get_card_libraries, normalize_display_config
 from inkslab_paths import (
     COLLECTION_FILE,
@@ -37,6 +38,7 @@ from inkslab_paths import (
     WIFI_FAILED_TRIGGER,
     WIFI_SETUP_TRIGGER,
 )
+from inkslab_weather import render_weather_canvas, weather_wait_seconds
 
 # --- DEFAULT CONFIGURATION ---
 # These defaults are used if no config file exists.
@@ -196,6 +198,18 @@ def get_local_ip():
         return parts[0] if parts else None
     except Exception:
         return None
+
+
+def _format_weather_status(snapshot):
+    """Short weather string for the existing dashboard status rows."""
+    if not isinstance(snapshot, dict) or not snapshot.get("ok"):
+        return ""
+    units_suffix = "F" if snapshot.get("weather_units") == "imperial" else "C"
+    temp = snapshot.get("temperature")
+    try:
+        return f"{int(round(float(temp)))} {units_suffix}"
+    except (TypeError, ValueError):
+        return ""
 
 
 def make_qr(url, box_size=4, border=1):
@@ -783,13 +797,10 @@ _PALETTE_IMAGE = Image.new('P', (1, 1))
 _PALETTE_IMAGE.putpalette(PALETTE_COLORS + [0, 0, 0] * (256 - len(PALETTE_COLORS) // 3))
 
 
-def process_image(img_path, master_index, config):
-    """Full image pipeline: layout -> enhance -> dither -> rotate for display."""
-    img = palette_ref = img_dithered = img_rgb = None
+def finalize_display_image(img, config):
+    """Apply the shared e-ink image pipeline to any prepared RGB canvas."""
+    palette_ref = img_dithered = img_rgb = None
     try:
-        header_mode = config.get("slab_header_mode", "normal")
-        img, info = create_slab_layout(img_path, master_index, header_mode)
-
         # Boost colors for the e-paper display (each enhance creates a new image)
         old = img
         img = ImageEnhance.Color(img).enhance(config["color_saturation"])
@@ -812,7 +823,7 @@ def process_image(img_path, master_index, config):
         final = img_rgb.rotate(config["rotation_angle"], expand=True)
         img_rgb.close(); img_rgb = None
 
-        return final, info
+        return final
     except Exception as e:
         logger.error(f"Image processing error: {e}")
         # Ensure any intermediate PIL images are freed even on exception
@@ -822,6 +833,25 @@ def process_image(img_path, master_index, config):
                     _im.close()
                 except Exception:
                     pass
+        return None
+
+
+def process_image(img_path, master_index, config):
+    """Full image pipeline: layout -> enhance -> dither -> rotate for display."""
+    img = None
+    try:
+        header_mode = config.get("slab_header_mode", "normal")
+        img, info = create_slab_layout(img_path, master_index, header_mode)
+        final = finalize_display_image(img, config)
+        img = None
+        return final, info
+    except Exception as e:
+        logger.error(f"Image processing error: {e}")
+        if img is not None:
+            try:
+                img.close()
+            except Exception:
+                pass
         return None, {}
 
 
@@ -1333,6 +1363,122 @@ def main():
     # If cards are deleted mid-operation, falls back to no-cards screen
     try:
         while not _shutdown:
+            if active_tcg not in TCG_LIBRARIES:
+                if active_tcg != "weather":
+                    write_status({
+                        "card_path": "",
+                        "set_name": "Plugin Not Ready",
+                        "set_info": active_tcg.replace("_", " ").title(),
+                        "card_num": "",
+                        "rarity": "",
+                        "timestamp": int(time.time()),
+                        "tcg": active_tcg,
+                        "total_cards": 0,
+                        "error": "This plugin is listed in the dashboard but does not have a live renderer yet.",
+                    })
+                    config, _ = wait_with_polling(60)
+                    active_tcg = config["active_tcg"]
+                    if active_tcg in TCG_LIBRARIES:
+                        rebuild_deck()
+                    continue
+
+                logger.info("Displaying: weather")
+                weather_canvas, weather_snapshot = render_weather_canvas(config)
+                final_img = finalize_display_image(weather_canvas, config)
+                weather_canvas.close()
+                weather_canvas = None
+                if not final_img:
+                    write_status({
+                        "card_path": "",
+                        "set_name": "Weather",
+                        "set_info": weather_snapshot.get("location_label", ""),
+                        "card_num": "",
+                        "rarity": weather_snapshot.get("reason", "Weather is temporarily unavailable."),
+                        "timestamp": int(time.time()),
+                        "tcg": active_tcg,
+                        "total_cards": 0,
+                        "error": weather_snapshot.get("reason", "Weather is temporarily unavailable."),
+                    })
+                    config, _ = wait_with_polling(60)
+                    active_tcg = config["active_tcg"]
+                    if active_tcg in TCG_LIBRARIES:
+                        rebuild_deck()
+                    continue
+
+                wait = resolve_display_wait(
+                    config.get("display_mode"),
+                    config.get("display_schedule"),
+                    weather_wait_seconds(config),
+                )
+                paused = os.path.exists(PAUSE_FILE)
+                if paused:
+                    try:
+                        with open(PAUSE_FILE, 'w') as f:
+                            f.write(str(wait))
+                    except OSError:
+                        pass
+
+                status_info = {
+                    "card_path": "",
+                    "set_name": "Weather",
+                    "set_info": weather_snapshot.get("location_label", ""),
+                    "card_num": _format_weather_status(weather_snapshot),
+                    "rarity": weather_snapshot.get("condition_label", weather_snapshot.get("reason", "")),
+                    "timestamp": int(time.time()),
+                    "tcg": active_tcg,
+                    "total_cards": 0,
+                    "prev_cards": [],
+                    "next_cards": [],
+                    "next_change": 0,
+                    "paused": paused,
+                    "interval": wait,
+                    "display_updating": True,
+                }
+                write_status(status_info)
+
+                try:
+                    epd.init()
+                    epd.display(epd.getbuffer(final_img))
+                except Exception as e:
+                    logger.error(f"Display error: {e}")
+                finally:
+                    try:
+                        epd.sleep()
+                    except Exception:
+                        pass
+
+                status_info["display_updating"] = False
+                status_info["next_change"] = 0 if paused else int(time.time()) + wait
+                write_status(status_info)
+                final_img.close()
+                gc.collect()
+
+                config, action = wait_with_polling(wait)
+
+                if isinstance(action, tuple) and action[0] == "wifi_failed":
+                    show_wifi_failed_screen(epd, config, ssid=action[1])
+                    time.sleep(EINK_RENDER_WAIT)
+                    continue
+                if action == "wifi_connected":
+                    show_splash_screen(epd, config)
+                    time.sleep(EINK_RENDER_WAIT)
+                    continue
+                if action == "wifi_setup":
+                    show_setup_screen(epd, config)
+                    _wifi_setup_wait_loop(epd, config)
+                    show_splash_screen(epd, config)
+                    time.sleep(EINK_RENDER_WAIT)
+                    continue
+                if action == "unbox":
+                    show_unbox_screen(epd, config)
+                    while not _shutdown:
+                        time.sleep(5)
+                    break
+
+                active_tcg = config["active_tcg"]
+                if active_tcg in TCG_LIBRARIES:
+                    rebuild_deck()
+                continue
 
             # No cards available — show welcome screen and wait for downloads
             _no_cards_shown = False
@@ -1380,6 +1526,9 @@ def main():
                     continue
 
                 new_tcg = config["active_tcg"]
+                if new_tcg not in TCG_LIBRARIES:
+                    active_tcg = new_tcg
+                    break
                 if (new_tcg != active_tcg
                         or config["collection_only"] != _deck_collection_only
                         or action in ("collection_changed", "library_changed")):
@@ -1390,6 +1539,8 @@ def main():
 
             if _shutdown:
                 break
+            if active_tcg not in TCG_LIBRARIES:
+                continue
 
             # Card display loop — runs until cards run out or shutdown
             while not _shutdown:
@@ -1472,7 +1623,8 @@ def main():
                     hr = (time.gmtime().tm_hour + int(tz_offset)) % 24
                 else:
                     hr = time.localtime().tm_hour
-                wait = config["day_interval"] if config["day_start"] <= hr < config["day_end"] else config["night_interval"]
+                base_wait = config["day_interval"] if config["day_start"] <= hr < config["day_end"] else config["night_interval"]
+                wait = resolve_display_wait(config.get("display_mode"), config.get("display_schedule"), base_wait)
                 paused = os.path.exists(PAUSE_FILE)
 
                 # If paused and skipping to a new card, reset the pause file to the
@@ -1648,6 +1800,9 @@ def main():
 
                 # If TCG or collection mode changed, rebuild and advance to new card
                 new_tcg = config["active_tcg"]
+                if new_tcg not in TCG_LIBRARIES:
+                    active_tcg = new_tcg
+                    break
                 needs_rebuild = (new_tcg != active_tcg
                                  or config["collection_only"] != _deck_collection_only
                                  or action == "library_changed"
