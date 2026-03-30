@@ -203,6 +203,58 @@ sudo systemctl restart inkslab inkslab_web
 
 ---
 
+## Plugin Development
+
+InkSlab is moving toward a modular app system on the experimental branch.
+
+### What works today
+- Built-in apps like Weather, News, Calendar, Market, and Reminders can be enabled from the dashboard
+- Local plugin manifests are discovered from:
+  - `/home/pi/inkslab/plugins`
+  - `/home/pi/inkslab_plugins`
+- Manifest-defined settings can appear in the `Setup > Apps` UI without executing plugin code
+
+### What is still in progress
+- Safe execution of third-party plugin Python code
+- Install-from-GitHub flows in the web UI
+- Stronger sandboxing and trust controls for community plugins
+
+### Starter Template
+
+This repo now includes a starter plugin folder at:
+
+```text
+plugins/example_ambient/
+```
+
+It includes:
+- `manifest.json` for plugin metadata and settings schema
+- `__init__.py` as the future render entry point shape
+- `README.md` with current expectations
+
+### Manifest Shape
+
+```json
+{
+  "plugin_id": "example_ambient",
+  "name": "Example Ambient",
+  "kind": "module",
+  "description": "Starter manifest for a future community InkSlab plugin.",
+  "config_schema": [
+    {"key": "example_title", "label": "Title", "type": "text", "default": "My Ambient Plugin"},
+    {"key": "example_mode", "label": "Mode", "type": "select", "default": "simple", "options": [
+      {"value": "simple", "label": "Simple"},
+      {"value": "detailed", "label": "Detailed"}
+    ]},
+    {"key": "example_notes", "label": "Notes", "type": "textarea", "default": ""}
+  ]
+}
+```
+
+For now, think of community plugins as `manifest-first`: InkSlab can discover them, show their metadata, and preserve consistent settings while the live execution contract is being finished.
+
+---
+
 ## Custom Images
 
 Upload your own images to display on the InkSlab.

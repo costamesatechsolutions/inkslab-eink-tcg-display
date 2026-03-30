@@ -23,6 +23,7 @@ DEMO_QUOTES = {
     "BTC-USD": {"price": 84210.00, "change_pct": -1.14, "label": "Bitcoin"},
     "ETH-USD": {"price": 4688.45, "change_pct": 1.02, "label": "Ethereum"},
 }
+MARKET_FAILURE_BACKOFF_SECONDS = 15 * 60
 
 
 def get_market_settings(config):
@@ -75,6 +76,14 @@ def _write_cache(snapshot):
         pass
 
 
+def _cache_matches_settings(cached, settings):
+    return bool(
+        cached
+        and cached.get("symbols") == settings["market_symbols"]
+        and cached.get("refresh_minutes") == settings["market_refresh_minutes"]
+    )
+
+
 def _format_price(value):
     try:
         value = float(value)
@@ -119,6 +128,8 @@ def _demo_snapshot(settings):
         "provider": "Sample Data",
         "quotes": quotes,
         "reason": "Demo values are showing. Turn demo mode off to use live Yahoo Finance quotes.",
+        "symbols": settings["market_symbols"],
+        "refresh_minutes": settings["market_refresh_minutes"],
         "updated_at": int(time.time()),
     }
 
@@ -176,6 +187,7 @@ def _live_snapshot(settings):
         "mode": "live",
         "provider": "Yahoo Finance",
         "symbols": settings["market_symbols"],
+        "refresh_minutes": settings["market_refresh_minutes"],
         "quotes": quotes,
         "reason": "",
         "updated_at": int(time.time()),
@@ -188,22 +200,27 @@ def fetch_market_snapshot(config):
         return _demo_snapshot(settings)
 
     cached = _read_cache()
-    if (
-        cached
-        and cached.get("symbols") == settings["market_symbols"]
-        and int(time.time()) - int(cached.get("updated_at", 0)) < settings["market_refresh_minutes"] * 60
-    ):
+    now = int(time.time())
+    if _cache_matches_settings(cached, settings) and now - int(cached.get("updated_at", 0)) < settings["market_refresh_minutes"] * 60:
+        return cached
+
+    if _cache_matches_settings(cached, settings) and now < int(cached.get("retry_after", 0)):
         return cached
 
     snapshot, error = _live_snapshot(settings)
     if snapshot:
+        snapshot.pop("retry_after", None)
         _write_cache(snapshot)
         return snapshot
-    if cached:
+    if _cache_matches_settings(cached, settings):
         cached["reason"] = "Showing cached market data because live Yahoo Finance refresh failed."
+        cached["retry_after"] = now + MARKET_FAILURE_BACKOFF_SECONDS
+        _write_cache(cached)
         return cached
     fallback = _demo_snapshot(settings)
     fallback["reason"] = error or "Live Yahoo Finance quotes were unavailable, so demo values are showing for now."
+    fallback["retry_after"] = now + MARKET_FAILURE_BACKOFF_SECONDS
+    _write_cache(fallback)
     return fallback
 
 

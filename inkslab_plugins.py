@@ -253,6 +253,41 @@ def _safe_manifest_value(value, default=""):
     return str(value).strip() if value is not None else default
 
 
+def _safe_manifest_schema(schema):
+    if not isinstance(schema, list):
+        return None
+    cleaned = []
+    for field in schema[:20]:
+        if not isinstance(field, dict):
+            continue
+        key = _safe_manifest_value(field.get("key"))[:48]
+        label = _safe_manifest_value(field.get("label"), key)[:64]
+        field_type = _safe_manifest_value(field.get("type"), "text").lower()
+        if not key or field_type not in ("text", "number", "select", "textarea"):
+            continue
+        row = {"key": key, "label": label, "type": field_type}
+        if "default" in field:
+            row["default"] = field.get("default")
+        if field_type == "select":
+            options = field.get("options")
+            if not isinstance(options, list):
+                continue
+            cleaned_options = []
+            for option in options[:20]:
+                if not isinstance(option, dict):
+                    continue
+                value = _safe_manifest_value(option.get("value"))[:64]
+                option_label = _safe_manifest_value(option.get("label"), value)[:64]
+                if not value:
+                    continue
+                cleaned_options.append({"value": value, "label": option_label})
+            if not cleaned_options:
+                continue
+            row["options"] = cleaned_options
+        cleaned.append(row)
+    return cleaned or None
+
+
 def _load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinition]:
     """Load a plugin manifest safely without executing plugin code."""
     try:
@@ -278,6 +313,9 @@ def _load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinit
         settings_keys = [str(k).strip() for k in settings_keys[:20] if str(k).strip()]
     else:
         settings_keys = []
+    config_schema = _safe_manifest_schema(manifest.get("config_schema"))
+    if config_schema and not settings_keys:
+        settings_keys = [str(field.get("key")) for field in config_schema if field.get("key")]
 
     return PluginDefinition(
         plugin_id=plugin_id,
@@ -290,6 +328,7 @@ def _load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinit
         source="local-manifest",
         manifest_path=manifest_path,
         runtime_enabled=False,
+        config_schema=config_schema,
     )
 
 

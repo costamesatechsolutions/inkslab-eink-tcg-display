@@ -1,0 +1,36 @@
+{
+  "plugin_id": "example_ambient",
+  "name": "Example Ambient",
+  "kind": "module",
+  "accent_color": "#5AA9E6",
+  "description": "Starter manifest for a future community InkSlab plugin.",
+  "settings_keys": [
+    "example_title",
+    "example_mode",
+    "example_notes"
+  ],
+  "config_schema": [
+    {
+      "key": "example_title",
+      "label": "Title",
+      "type": "text",
+      "default": "My Ambient Plugin"
+    },
+    {
+      "key": "example_mode",
+      "label": "Mode",
+      "type": "select",
+      "default": "simple",
+      "options": [
+        {"value": "simple", "label": "Simple"},
+        {"value": "detailed", "label": "Detailed"}
+      ]
+    },
+    {
+      "key": "example_notes",
+      "label": "Notes",
+      "type": "textarea",
+      "default": ""
+    }
+  ]
+}
