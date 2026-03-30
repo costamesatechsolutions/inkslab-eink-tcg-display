@@ -2783,6 +2783,15 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+function objectFromEntriesCompat(entries) {
+  var out = {};
+  (entries || []).forEach(function(entry) {
+    if (!entry || entry.length < 2) return;
+    out[entry[0]] = entry[1];
+  });
+  return out;
+}
+
 // --- Tab persistence ---
 function showTab(name) {
   localStorage.setItem('inkslab_tab', name);
@@ -3293,7 +3302,7 @@ function loadDisplayPlan() {
     var schedule = d.display_schedule || [];
     var plugins = d.plugins || {};
     var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
-    var selectablePlugins = Object.fromEntries(Object.entries(plugins).filter(function(entry) {
+    var selectablePlugins = objectFromEntriesCompat(Object.entries(plugins).filter(function(entry) {
       return enabledPlugins.indexOf(entry[0]) !== -1 && entry[1] && entry[1].runtime_enabled;
     }));
     _displayPlanState.selectable_plugins = selectablePlugins;
