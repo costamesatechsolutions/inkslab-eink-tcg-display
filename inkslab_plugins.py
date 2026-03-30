@@ -8,7 +8,7 @@ internal plugins so the daemon and web UI can share a single source of truth.
 """
 
 from dataclasses import asdict, dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ class PluginDefinition:
     download_script: Optional[str] = None
     description: str = ""
     builtin: bool = True
+    settings_keys: Optional[List[str]] = None
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -36,6 +37,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         accent_color="#36A5CA",
         download_script="download_cards_pokemon.py",
         description="Pokemon card slideshow mode.",
+        settings_keys=["collection_only", "slab_header_mode", "rotation_angle", "color_saturation"],
     ),
     "mtg": PluginDefinition(
         plugin_id="mtg",
@@ -45,6 +47,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         accent_color="#6BCCBD",
         download_script="download_cards_mtg.py",
         description="Magic: The Gathering card slideshow mode.",
+        settings_keys=["collection_only", "slab_header_mode", "rotation_angle", "color_saturation"],
     ),
     "lorcana": PluginDefinition(
         plugin_id="lorcana",
@@ -54,6 +57,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         accent_color="#C084FC",
         download_script="download_cards_lorcana.py",
         description="Disney Lorcana card slideshow mode.",
+        settings_keys=["collection_only", "slab_header_mode", "rotation_angle", "color_saturation"],
     ),
     "custom": PluginDefinition(
         plugin_id="custom",
@@ -62,6 +66,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         card_library_path="/home/pi/custom_cards",
         accent_color="#F59E0B",
         description="User-uploaded custom image slideshow mode.",
+        settings_keys=["collection_only", "slab_header_mode", "rotation_angle", "color_saturation"],
     ),
 }
 
@@ -88,3 +93,15 @@ def get_card_libraries() -> Dict[str, str]:
         for plugin_id, plugin in BUILTIN_PLUGINS.items()
         if plugin.card_library_path
     }
+
+
+def get_plugin_ids() -> List[str]:
+    """Return valid plugin IDs."""
+    return list(BUILTIN_PLUGINS.keys())
+
+
+def normalize_active_plugin(value: Optional[str], default: str = "pokemon") -> str:
+    """Normalize a requested active plugin ID to a known built-in plugin."""
+    if value in BUILTIN_PLUGINS:
+        return str(value)
+    return default

@@ -20,7 +20,12 @@ import time
 import threading
 from flask import Flask, request, jsonify, send_file, redirect, make_response
 import wifi_manager
-from inkslab_plugins import get_card_libraries, get_plugin_payload, get_plugins
+from inkslab_plugins import (
+    get_card_libraries,
+    get_plugin_payload,
+    get_plugins,
+    normalize_active_plugin,
+)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
@@ -196,6 +201,8 @@ def load_config():
                 config.update(json.load(f))
         except Exception:
             pass
+    config["active_tcg"] = normalize_active_plugin(config.get("active_tcg"))
+    config["active_plugin"] = config["active_tcg"]
     return config
 
 
@@ -311,6 +318,8 @@ def api_set_config():
     updates = request.get_json(force=True)
     if not isinstance(updates, dict):
         return jsonify({"error": "invalid request"}), 400
+    if 'active_plugin' in updates and 'active_tcg' not in updates:
+        updates['active_tcg'] = updates['active_plugin']
     # Validate values to prevent bad config from crashing the display daemon
     try:
         if 'day_interval' in updates:
@@ -341,8 +350,7 @@ def api_set_config():
     except (ValueError, TypeError):
         return jsonify({"error": "invalid value"}), 400
     if 'active_tcg' in updates:
-        if updates['active_tcg'] not in ('pokemon', 'mtg', 'lorcana', 'custom'):
-            updates['active_tcg'] = 'pokemon'
+        updates['active_tcg'] = normalize_active_plugin(updates['active_tcg'])
     if 'slab_header_mode' in updates:
         if updates['slab_header_mode'] not in ('normal', 'inverted', 'off'):
             updates['slab_header_mode'] = 'normal'
@@ -352,6 +360,7 @@ def api_set_config():
             if key in updates:
                 config[key] = updates[key]
         save_config(config)
+        config["active_plugin"] = config["active_tcg"]
     # Write interim status so the web UI reflects the change instantly,
     # even if the display daemon is blocked on a 15-30s e-paper refresh.
     if 'active_tcg' in updates:
@@ -547,7 +556,11 @@ def api_tcg_list():
 @app.route('/api/plugins')
 def api_plugins():
     """Return plugin metadata for the modular feature branch UI."""
-    return jsonify(get_plugin_payload())
+    config = load_config()
+    return jsonify({
+        "active_plugin": config["active_plugin"],
+        "plugins": get_plugin_payload(),
+    })
 
 
 @app.route('/api/sets')
