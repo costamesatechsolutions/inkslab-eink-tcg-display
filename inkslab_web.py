@@ -2548,10 +2548,6 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   <div class="card" id="display-mode-card">
     <h3>Now Showing</h3>
     <p id="display-mode-note" class="context-note">Loading display behavior...</p>
-    <div id="quick-switch-card" style="display:none">
-      <p class="subtle-note">Manual card switching is only for quick testing. Your saved display setup is what InkSlab normally follows.</p>
-      <div class="flex-row" id="quick-switch-btns"></div>
-    </div>
   </div>
 </div>
 
@@ -3141,31 +3137,6 @@ function togglePause() {
     });
 }
 
-function switchTCG(tcg, activeBtn) {
-  var btns = document.getElementById('quick-switch-btns').querySelectorAll('.btn');
-  btns.forEach(function(b) { b.disabled = true; });
-  var orig = activeBtn.textContent;
-  activeBtn.textContent = 'Switching...';
-  fetch(API + '/api/config', {method:'POST', body: JSON.stringify({active_tcg: tcg}),
-    headers:{'Content-Type':'application/json'}})
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      activeBtn.textContent = orig;
-      btns.forEach(function(b) { b.disabled = false; });
-      if (d && d.error) { showToast(d.error || 'Switch failed'); return; }
-      var name = (_tcgRegistry[tcg] && _tcgRegistry[tcg].name) || tcg.toUpperCase();
-      showToast('Switching to ' + name + '...');
-      document.getElementById('st-tcg').textContent = name;
-      setOptimisticLoading('Switching to ' + name + '...');
-      startRapidPoll();
-    })
-    .catch(function() {
-      activeBtn.textContent = orig;
-      btns.forEach(function(b) { b.disabled = false; });
-      showToast('Switch failed');
-    });
-}
-
 // --- Settings ---
 function getBrowserUtcOffset() {
   return -(new Date().getTimezoneOffset() / 60);
@@ -3430,14 +3401,9 @@ function syncModularUI(d) {
   var state = d || _pluginUiState;
   if (!state) return;
   var hasTCG = hasEnabledPluginKind('tcg');
-  var quickSwitch = document.getElementById('quick-switch-card');
   var collectionTabBtn = document.getElementById('tab-btn-collection');
   var downloadsTabBtn = document.getElementById('tab-btn-downloads');
   var defaultTcgGroup = document.getElementById('default-tcg-group');
-  if (quickSwitch) {
-    var showManualSwitch = hasTCG && _displayPlanState && _displayPlanState.display_mode === 'single';
-    quickSwitch.style.display = showManualSwitch ? 'block' : 'none';
-  }
   if (collectionTabBtn) collectionTabBtn.textContent = 'Cards';
   if (downloadsTabBtn) downloadsTabBtn.textContent = 'Card Data';
   if (defaultTcgGroup) defaultTcgGroup.style.display = hasTCG ? 'block' : 'none';
@@ -4442,11 +4408,6 @@ function buildDynamicUI(registry) {
     var registryKeys = Object.keys(registry);
     _cardPluginContext = registryKeys[0] || 'pokemon';
   }
-  // Quick Switch buttons
-  var qsEl = document.getElementById('quick-switch-btns');
-  qsEl.innerHTML = Object.entries(registry).map(function(e) {
-    return '<button class="btn btn-secondary btn-block" onclick="switchTCG(\\'' + e[0] + '\\', this)">' + e[1].name + '</button>';
-  }).join('');
   // Settings TCG dropdown
   var sel = document.getElementById('cfg-tcg');
   sel.innerHTML = Object.entries(registry).map(function(e) {
