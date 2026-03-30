@@ -2558,8 +2558,8 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <!-- SETTINGS TAB -->
 <div id="tab-settings" class="panel">
   <div class="subtabs">
-    <button class="subtab active" id="settings-subtab-overview" onclick="showSettingsSection('overview')">Overview</button>
-    <button class="subtab" id="settings-subtab-plugins" onclick="showSettingsSection('plugins')">Plugins</button>
+    <button class="subtab active" id="settings-subtab-overview" onclick="showSettingsSection('overview')">Display</button>
+    <button class="subtab" id="settings-subtab-plugins" onclick="showSettingsSection('plugins')">Apps</button>
     <button class="subtab" id="settings-subtab-device" onclick="showSettingsSection('device')">Device</button>
   </div>
 
@@ -2647,6 +2647,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
       <div class="form-group">
         <label>Primary Plugin</label>
         <select id="single-plugin"></select>
+        <div class="subtle-note">Choose the main thing InkSlab should show here. To turn apps on or configure them, use Setup > Apps.</div>
       </div>
       <div class="form-group" id="display-rotation-group">
         <label>Switch Every (minutes)</label>
@@ -2667,17 +2668,17 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 
   <div class="settings-section" id="settings-section-plugins">
     <div class="card section-intro">
-      <h3>Plugin Controls</h3>
-      <p class="context-note">Enable the modules you want this device to use, then fill in the settings that belong only to those plugins. This keeps the rest of the dashboard cleaner.</p>
-      <div class="pill-note">Each plugin keeps its own settings</div>
+      <h3>Apps</h3>
+      <p class="context-note">Turn features on here and fill in only the settings those features need. This is where Weather, News, Cards, and future apps get configured.</p>
+      <div class="pill-note">Enable apps, then adjust their settings</div>
     </div>
     <div class="card">
-      <h3>Plugin Manager</h3>
-      <p class="context-note">Enable only the plugins this device should actually use. A weather-only or traffic-only build should feel just as natural here as a TCG build.</p>
+      <h3>Installed Apps</h3>
+      <p class="context-note">Enable only the apps you want this slab to use. After an app is enabled, you can show it right away or include it in the display behavior above.</p>
       <div id="plugin-summary" style="font-size:12px;color:#6BCCBD;margin-bottom:10px">Loading plugins...</div>
       <div id="plugin-list" class="plugin-list"></div>
-      <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save Plugin Selection</button>
-      <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Built-in roadmap plugins already appear here so the architecture stays honest while we turn them into real modules.</p>
+      <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="savePluginConfig()">Save App Settings</button>
+      <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Some apps are still marked coming soon. Those are placeholders for the modular system and are not runnable yet.</p>
     </div>
   </div>
 
@@ -2728,7 +2729,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <div class="form-group" style="margin-top:12px">
       <label>Card Plugin</label>
       <select id="cards-tcg-select" onchange="setCardPluginContext(this.value, 'cards')"></select>
-      <div class="subtle-note">Choose which card plugin you want to manage. Weather mode will not change this.</div>
+      <div class="subtle-note">Cards are only for trading-card apps. To set up Weather or other non-card apps, go to Setup > Apps.</div>
     </div>
   </div>
   <div class="card">
@@ -2768,7 +2769,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
     <div class="form-group" style="margin-top:12px">
       <label>Card Plugin</label>
       <select id="sources-tcg-select" onchange="setCardPluginContext(this.value, 'sources')"></select>
-      <div class="subtle-note">Use this to pick which card library you want to download or clean up.</div>
+      <div class="subtle-note">This page is only for trading-card data. To configure Weather or other non-card apps, go to Setup > Apps.</div>
     </div>
   </div>
   <div class="card">
@@ -3308,7 +3309,7 @@ function activatePlugin(pluginId) {
     })
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d && d.ok) {
-      showToast('Switched to ' + pluginId);
+      showToast('Showing ' + pluginId + ' now');
       loadPlugins();
       loadDisplayPlan();
       startRapidPoll();
@@ -3331,7 +3332,8 @@ function loadPlugins() {
     var pluginSettings = d.plugin_settings || {};
     var active = d.active_plugin || '';
     var entries = Object.entries(plugins);
-    summaryEl.textContent = enabledPlugins.length + ' runnable plugin' + (enabledPlugins.length === 1 ? '' : 's') + ' enabled. Active: ' + active;
+    var activeName = (plugins[active] && plugins[active].name) ? plugins[active].name : active;
+    summaryEl.textContent = enabledPlugins.length + ' app' + (enabledPlugins.length === 1 ? '' : 's') + ' enabled. Showing now: ' + (activeName || '-');
     listEl.innerHTML = entries.map(function(entry) {
       var id = entry[0];
       var plugin = entry[1] || {};
@@ -3344,18 +3346,18 @@ function loadPlugins() {
           : '<span class="plugin-badge" style="background:#4B5563;color:#FCFDF0">Coming Soon</span>');
       var meta = [];
       if (plugin.kind) meta.push(plugin.kind.toUpperCase());
-      if (plugin.download_script) meta.push('downloadable');
+      if (plugin.download_script) meta.push('card data');
       if (plugin.config_schema && plugin.config_schema.length) meta.push(plugin.config_schema.length + ' settings');
       if (plugin.source === 'local-manifest') meta.push('manifest only');
       var summaryParts = [];
       if (plugin.kind) summaryParts.push(plugin.kind.toUpperCase());
-      if (plugin.download_script) summaryParts.push('downloadable');
+      if (plugin.download_script) summaryParts.push('card data');
       if (!isRuntime) summaryParts.push('roadmap');
       else summaryParts.push(isEnabled ? 'enabled' : 'disabled');
       var summary = summaryParts.join(' • ');
       var note = isRuntime
-        ? 'This plugin can be enabled for rotation right now.'
-        : 'This plugin is part of the modular roadmap and is not runnable yet.';
+        ? 'Enable this app if you want InkSlab to use it. Then use Show Now for a quick test, or include it in Display behavior.'
+        : 'This app is part of the modular roadmap and is not runnable yet.';
       var settingsHtml = '';
       if (plugin.config_schema && plugin.config_schema.length) {
         settingsHtml = '<div class="plugin-settings">' + plugin.config_schema.map(function(field) {
@@ -3396,8 +3398,8 @@ function loadPlugins() {
         '</div>' +
         '<div class="plugin-inline-status">' +
           (isRuntime
-            ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Enable</label>' +
-              '<button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Use Now</button>'
+            ? '<label class="plugin-toggle"><input type="checkbox" data-plugin-enabled="' + id + '"' + (isEnabled ? ' checked' : '') + '> Use On This Slab</label>' +
+              '<button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Show Now</button>'
             : '<div class="plugin-note" style="margin-top:0">Not runnable yet</div>') +
         '</div>' +
         '<div class="plugin-detail' + (detailsOpen ? ' open' : '') + '" id="plugin-detail-' + id + '">' +
@@ -3469,15 +3471,15 @@ function savePluginConfig() {
     })
   }).then(r => r.json()).then(function(d) {
     if (d && d.ok) {
-      showToast('Plugin selection saved');
+      showToast('App settings saved');
       loadPlugins();
       loadDisplayPlan();
       startRapidPoll();
     } else {
-      showToast((d && d.error) || 'Failed to save plugin selection');
+      showToast((d && d.error) || 'Failed to save app settings');
     }
   }).catch(function() {
-    showToast('Failed to save plugin selection');
+    showToast('Failed to save app settings');
   });
 }
 
