@@ -152,6 +152,19 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Stage 2.6: Sync Python dependencies for new modular apps
+write_status "pulling" "Syncing Python dependencies..." ""
+if ! pip3 install --break-system-packages -r "$SCRIPT_DIR/requirements.txt" >/dev/null 2>&1; then
+    if ! pip3 install -r "$SCRIPT_DIR/requirements.txt" >/dev/null 2>&1; then
+        write_status "error" "Could not install Python dependencies for the update." "true"
+        if [ -n "$PREV_COMMIT" ]; then
+            git reset --hard "$PREV_COMMIT" 2>/dev/null
+            chown -R pi:pi "$SCRIPT_DIR" 2>/dev/null
+        fi
+        exit 1
+    fi
+fi
+
 # Clean up old git objects to prevent storage growth
 git gc --auto 2>/dev/null
 

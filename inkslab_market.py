@@ -2,14 +2,12 @@
 """
 Market Snapshot helpers for InkSlab.
 
-Demo mode works without setup. Optional live quotes can use Alpha Vantage.
+Demo mode works without setup. Optional live quotes can use yfinance.
 """
 
 import json
 import os
 import time
-import urllib.parse
-import urllib.request
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -29,7 +27,6 @@ def get_market_settings(config):
     bucket = plugin_settings.get("market") if isinstance(plugin_settings, dict) else {}
     bucket = bucket if isinstance(bucket, dict) else {}
     demo_mode = str(bucket.get("market_demo_mode") or "on").strip().lower()
-    api_key = str(bucket.get("market_api_key") or "").strip()
     symbols_raw = str(bucket.get("market_symbols") or "SPY,QQQ,BTC-USD").strip()
     symbols = [symbol.strip().upper() for symbol in symbols_raw.split(",") if symbol.strip()][:4]
     if not symbols:
@@ -40,7 +37,6 @@ def get_market_settings(config):
         refresh_minutes = 30
     return {
         "market_demo_mode": "off" if demo_mode == "off" else "on",
-        "market_api_key": api_key[:80],
         "market_symbols": symbols,
         "market_refresh_minutes": refresh_minutes,
     }
@@ -74,12 +70,6 @@ def _write_cache(snapshot):
             json.dump(snapshot, handle)
     except Exception:
         pass
-
-
-def _fetch_json(url, timeout=15):
-    request = urllib.request.Request(url, headers={"User-Agent": "InkSlab/1.0"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
 
 
 def _format_price(value):
@@ -123,15 +113,68 @@ def _demo_snapshot(settings):
     return {
         "ok": True,
         "mode": "demo",
+        "provider": "Demo",
         "quotes": quotes,
-        "reason": "Demo values are showing until you add an API key.",
+        "reason": "Demo values are showing. Turn demo mode off to use free Yahoo Finance quotes.",
         "updated_at": int(time.time()),
     }
 
 
+def _live_snapshot(settings):
+    try:
+        import yfinance as yf
+    except Exception:
+        return None, "yfinance is not installed yet."
+
+    quotes = []
+    for symbol in settings["market_symbols"]:
+        ticker = yf.Ticker(symbol)
+        fast = getattr(ticker, "fast_info", None) or {}
+        history = ticker.history(period="5d", interval="1d", auto_adjust=False)
+        price = fast.get("lastPrice") or fast.get("regularMarketPrice")
+        prev_close = fast.get("previousClose")
+        if (price is None or prev_close in (None, 0)) and history is not None and not history.empty:
+            try:
+                price = price if price is not None else float(history["Close"].iloc[-1])
+                prev_close = prev_close if prev_close not in (None, 0) else float(history["Close"].iloc[-2])
+            except Exception:
+                pass
+        change_pct = 0.0
+        try:
+            if price is not None and prev_close not in (None, 0):
+                change_pct = ((float(price) - float(prev_close)) / float(prev_close)) * 100.0
+        except Exception:
+            change_pct = 0.0
+        label = symbol
+        try:
+            info = getattr(ticker, "info", {}) or {}
+            label = str(info.get("shortName") or info.get("longName") or symbol)
+        except Exception:
+            pass
+        quotes.append({
+            "symbol": symbol,
+            "label": label[:40],
+            "price": price,
+            "change_pct": change_pct,
+        })
+
+    if not quotes:
+        return None, "Yahoo Finance did not return any quotes."
+
+    return {
+        "ok": True,
+        "mode": "live",
+        "provider": "Yahoo Finance",
+        "symbols": settings["market_symbols"],
+        "quotes": quotes,
+        "reason": "",
+        "updated_at": int(time.time()),
+    }, ""
+
+
 def fetch_market_snapshot(config):
     settings = get_market_settings(config)
-    if settings["market_demo_mode"] == "on" or not settings["market_api_key"]:
+    if settings["market_demo_mode"] == "on":
         return _demo_snapshot(settings)
 
     cached = _read_cache()
@@ -142,37 +185,16 @@ def fetch_market_snapshot(config):
     ):
         return cached
 
-    quotes = []
-    try:
-        for symbol in settings["market_symbols"]:
-            query = urllib.parse.urlencode({
-                "function": "GLOBAL_QUOTE",
-                "symbol": symbol,
-                "apikey": settings["market_api_key"],
-            })
-            payload = _fetch_json("https://www.alphavantage.co/query?" + query)
-            quote = payload.get("Global Quote", {}) if isinstance(payload, dict) else {}
-            quotes.append({
-                "symbol": symbol,
-                "label": symbol,
-                "price": quote.get("05. price"),
-                "change_pct": str(quote.get("10. change percent", "0")).replace("%", ""),
-            })
-        snapshot = {
-            "ok": True,
-            "mode": "live",
-            "symbols": settings["market_symbols"],
-            "quotes": quotes,
-            "reason": "",
-            "updated_at": int(time.time()),
-        }
+    snapshot, error = _live_snapshot(settings)
+    if snapshot:
         _write_cache(snapshot)
         return snapshot
-    except Exception:
-        if cached:
-            cached["reason"] = "Showing cached market data because the latest refresh failed."
-            return cached
-        return _demo_snapshot(settings)
+    if cached:
+        cached["reason"] = "Showing cached market data because live Yahoo Finance refresh failed."
+        return cached
+    fallback = _demo_snapshot(settings)
+    fallback["reason"] = error or "Falling back to demo values because live Yahoo Finance quotes failed."
+    return fallback
 
 
 def render_market_canvas(config):
@@ -193,6 +215,7 @@ def render_market_canvas(config):
     draw.text((20, 40), "Snapshot", fill=(255, 255, 255), font=font_header)
     mode_label = "Demo" if snapshot.get("mode") == "demo" else "Live"
     draw.text((380, 16), mode_label, fill=(255, 255, 255), font=font_meta, anchor="ra")
+    draw.text((380, 40), str(snapshot.get("provider") or "Market")[:18], fill=(255, 255, 255), font=font_meta, anchor="ra")
 
     quotes = snapshot.get("quotes") or []
     top = 104
@@ -211,5 +234,5 @@ def render_market_canvas(config):
     updated_struct = time.localtime(snapshot.get("updated_at", int(time.time())))
     draw.line((20, 582, 380, 582), fill=(220, 226, 230), width=1)
     draw.text((20, 586), "Updated " + time.strftime("%-I:%M %p", updated_struct), fill=(0, 0, 0), font=font_meta)
-    draw.text((380, 586), "Alpha Vantage", fill=(0, 0, 255), font=font_meta, anchor="ra")
+    draw.text((380, 586), str(snapshot.get("provider") or "Market")[:18], fill=(0, 0, 255), font=font_meta, anchor="ra")
     return canvas, snapshot

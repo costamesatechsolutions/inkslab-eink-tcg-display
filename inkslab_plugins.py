@@ -132,10 +132,10 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         name="Market Snapshot",
         kind="market",
         accent_color="#84A98C",
-        description="A simple stocks or crypto overview. Demo mode works immediately, and live quotes can use Alpha Vantage later.",
+        description="A simple stocks or crypto overview. Demo mode works immediately, and free no-key live quotes can use Yahoo Finance.",
         builtin=True,
         runtime_enabled=True,
-        settings_keys=["market_demo_mode", "market_symbols", "market_api_key", "market_refresh_minutes"],
+        settings_keys=["market_demo_mode", "market_symbols", "market_refresh_minutes"],
         config_schema=[
             {
                 "key": "market_demo_mode",
@@ -148,7 +148,6 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
                 ],
             },
             {"key": "market_symbols", "label": "Symbols (comma separated)", "type": "text", "default": "SPY,QQQ,BTC-USD"},
-            {"key": "market_api_key", "label": "Alpha Vantage API Key", "type": "text", "default": ""},
             {"key": "market_refresh_minutes", "label": "Refresh Minutes", "type": "number", "default": 30},
         ],
     ),
