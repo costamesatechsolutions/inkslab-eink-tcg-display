@@ -75,8 +75,11 @@ cd "$SCRIPT_DIR" || {
 # Fix "dubious ownership" error — service runs as root but repo is owned by pi
 git config --global safe.directory "$SCRIPT_DIR" 2>/dev/null
 
-# Auto-detect the default branch (main or master)
+# Use an explicitly selected branch when provided; otherwise auto-detect
+BRANCH="${INKSLAB_UPDATE_BRANCH:-}"
+if [ -z "$BRANCH" ]; then
 BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+fi
 if [ -z "$BRANCH" ]; then
     if git rev-parse --verify origin/main >/dev/null 2>&1; then
         BRANCH="main"
@@ -106,10 +109,19 @@ if [ "$FETCH_OK" = false ]; then
     exit 1
 fi
 
+if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+    write_status "error" "Branch $BRANCH was not found on GitHub." "true"
+    exit 1
+fi
+
 # Stage 2: Apply update using reset --hard (atomic, can't leave partial files)
-write_status "pulling" "Downloading update..." ""
+write_status "pulling" "Downloading update from $BRANCH..." ""
 # Stash any local changes (shouldn't be any on a device, but just in case)
 git stash --quiet 2>/dev/null
+if ! git checkout -B "$BRANCH" "origin/$BRANCH" >/dev/null 2>&1; then
+    write_status "error" "Could not switch to branch $BRANCH." "true"
+    exit 1
+fi
 # Hard reset to remote — this is atomic: files are fully written or not at all
 if ! git reset --hard "origin/$BRANCH" 2>&1; then
     write_status "error" "Update failed. Try rebooting and updating again." "true"

@@ -68,6 +68,7 @@ DEFAULTS = {
     "slab_header_mode": "normal",
     "timezone_offset": None,
     "timezone_name": None,
+    "update_branch": None,
 }
 
 # Track running download process
@@ -203,6 +204,7 @@ def load_config():
             pass
     config["active_tcg"] = normalize_active_plugin(config.get("active_tcg"))
     config["active_plugin"] = config["active_tcg"]
+    config["update_branch"] = _normalize_update_branch(config.get("update_branch"))
     return config
 
 
@@ -320,6 +322,8 @@ def api_set_config():
         return jsonify({"error": "invalid request"}), 400
     if 'active_plugin' in updates and 'active_tcg' not in updates:
         updates['active_tcg'] = updates['active_plugin']
+    if 'update_branch' in updates:
+        updates['update_branch'] = _normalize_update_branch(updates['update_branch'])
     # Validate values to prevent bad config from crashing the display daemon
     try:
         if 'day_interval' in updates:
@@ -1326,6 +1330,60 @@ def _git_default_branch():
     return 'main'
 
 
+def _git_current_branch():
+    """Return the currently checked out branch name."""
+    try:
+        r = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                           cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            branch = r.stdout.strip()
+            if branch and branch != "HEAD":
+                return branch
+    except Exception:
+        pass
+    return _git_default_branch()
+
+
+def _git_remote_branches(fetch_first=False):
+    """Return available remote branches on origin."""
+    if fetch_first:
+        try:
+            subprocess.run(['git', 'fetch', 'origin'],
+                           cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=30)
+        except Exception:
+            pass
+    branches = []
+    try:
+        r = subprocess.run(
+            ['git', 'for-each-ref', '--format=%(refname:strip=3)', 'refs/remotes/origin'],
+            cwd=SCRIPT_DIR, capture_output=True, text=True, timeout=5
+        )
+        if r.returncode == 0:
+            branches = [b.strip() for b in r.stdout.splitlines() if b.strip() and b.strip() != 'HEAD']
+    except Exception:
+        pass
+    if not branches:
+        branches = [_git_default_branch()]
+    if 'master' in branches:
+        branches = ['master'] + [b for b in branches if b != 'master']
+    return branches
+
+
+def _normalize_update_branch(branch, available=None):
+    """Normalize a selected update branch to a valid remote branch."""
+    available = available or _git_remote_branches(fetch_first=False)
+    candidate = (branch or '').strip()
+    if candidate in available:
+        return candidate
+    current = _git_current_branch()
+    if current in available:
+        return current
+    default = _git_default_branch()
+    if default in available:
+        return default
+    return available[0]
+
+
 @app.route('/api/version')
 def api_version():
     """Return the current version (hardcoded + git hash if available)."""
@@ -1341,16 +1399,32 @@ def api_version():
     return jsonify({"version": version})
 
 
+@app.route('/api/update/branches')
+def api_update_branches():
+    """Return available update branches for the current repo."""
+    branches = _git_remote_branches(fetch_first=True)
+    config = load_config()
+    return jsonify({
+        "branches": branches,
+        "selected": _normalize_update_branch(config.get("update_branch"), branches),
+        "current": _git_current_branch(),
+        "default": _git_default_branch(),
+    })
+
+
 @app.route('/api/update/check', methods=['POST'])
 def api_update_check():
     """Check if updates are available by comparing local vs remote HEAD."""
     try:
+        body = request.get_json(silent=True) or {}
         # Fetch first so branch detection can see remote refs
         fetch = subprocess.run(['git', 'fetch', 'origin'], cwd=SCRIPT_DIR,
                                capture_output=True, text=True, timeout=30)
         if fetch.returncode != 0:
             return jsonify({"ok": False, "error": "Could not reach update server. Check your internet connection."})
-        branch = _git_default_branch()
+        branches = _git_remote_branches(fetch_first=False)
+        config = load_config()
+        branch = _normalize_update_branch(body.get("branch") or config.get("update_branch"), branches)
         local = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=SCRIPT_DIR,
                                capture_output=True, text=True, timeout=5)
         remote = subprocess.run(['git', 'rev-parse', f'origin/{branch}'], cwd=SCRIPT_DIR,
@@ -1362,7 +1436,7 @@ def api_update_check():
         commits_behind = int(behind.stdout.strip()) if behind.returncode == 0 else 0
         # Build display version: "1.0.0-abc123" or just "1.0.0"
         local_version = f"{VERSION}-{local_hash}" if local_hash else VERSION
-        return jsonify({"ok": True, "local": local_version, "remote": remote_hash,
+        return jsonify({"ok": True, "branch": branch, "local": local_version, "remote": remote_hash,
                         "behind": commits_behind, "up_to_date": commits_behind == 0})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
@@ -1384,13 +1458,22 @@ def api_update_start():
     if not os.path.exists(script):
         return jsonify({"ok": False, "error": "Update script not found"})
     try:
+        body = request.get_json(silent=True) or {}
+        branches = _git_remote_branches(fetch_first=True)
+        branch = _normalize_update_branch(body.get("branch") or load_config().get("update_branch"), branches)
+        with _config_lock:
+            config = load_config()
+            config["update_branch"] = branch
+            save_config(config)
         # Clear old status
         if os.path.exists(UPDATE_STATUS_FILE):
             os.remove(UPDATE_STATUS_FILE)
-        subprocess.Popen(['bash', script], cwd=SCRIPT_DIR,
+        env = os.environ.copy()
+        env['INKSLAB_UPDATE_BRANCH'] = branch
+        subprocess.Popen(['bash', script], cwd=SCRIPT_DIR, env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True)
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "branch": branch})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
@@ -2456,6 +2539,11 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   <div class="card">
     <h3>Software Update</h3>
     <div id="update-info" style="margin-bottom:10px;font-size:13px;color:#6BCCBD;cursor:default;-webkit-user-select:none;user-select:none" onclick="adminTap()">Loading version...</div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label>Update Branch (testing devices only)</label>
+      <select id="update-branch" onchange="saveUpdateBranch()"></select>
+      <div id="update-branch-hint" style="margin-top:6px;font-size:11px;color:#8899a6"></div>
+    </div>
     <div class="flex-row" style="margin-bottom:8px">
       <button class="btn btn-secondary btn-block" onclick="checkUpdate()">Check for Updates</button>
       <button class="btn btn-primary btn-block" id="btn-update-now" style="display:none" onclick="startUpdate()">Update Now</button>
@@ -2892,6 +2980,7 @@ function loadSettings() {
     document.getElementById('cfg-day-end').value = c.day_end;
     document.getElementById('cfg-saturation').value = c.color_saturation;
     document.getElementById('cfg-collection').checked = c.collection_only;
+    loadUpdateBranches(c.update_branch);
     updateTimezoneHint();
     // Auto-detect timezone on first load if not set — just works for shipped units
     if (!c.timezone_name && !c.timezone_offset) {
@@ -2926,6 +3015,41 @@ function saveSettings() {
   };
   fetch(API + '/api/config', {method:'POST', body: JSON.stringify(cfg)})
     .then(function() { showToast('Settings saved!'); startRapidPoll(); });
+}
+
+function getSelectedUpdateBranch() {
+  var el = document.getElementById('update-branch');
+  return el ? el.value : '';
+}
+
+function loadUpdateBranches(selectedFromConfig) {
+  fetch(API + '/api/update/branches').then(r => r.json()).then(d => {
+    var sel = document.getElementById('update-branch');
+    var hint = document.getElementById('update-branch-hint');
+    if (!sel) return;
+    sel.innerHTML = (d.branches || []).map(function(branch) {
+      return '<option value="' + branch + '">' + branch + '</option>';
+    }).join('');
+    sel.value = selectedFromConfig || d.selected || d.current || d.default || 'master';
+    if (hint) {
+      hint.textContent = 'Current code branch: ' + (d.current || '-') + ' | Default shipping branch: ' + (d.default || 'master');
+    }
+  }).catch(function() {
+    var hint = document.getElementById('update-branch-hint');
+    if (hint) hint.textContent = 'Could not load branch list.';
+  });
+}
+
+function saveUpdateBranch() {
+  var branch = getSelectedUpdateBranch();
+  if (!branch) return;
+  fetch(API + '/api/config', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({update_branch: branch})
+  }).then(r => r.json()).then(function(d) {
+    if (d && !d.error) showToast('Update branch set to ' + branch);
+  });
 }
 
 // --- Admin (hidden) ---
@@ -3410,25 +3534,35 @@ function deleteData(tcg, btn) {
 function checkUpdate() {
   var el = document.getElementById('update-info');
   el.textContent = 'Checking...';
-  fetch(API + '/api/update/check', {method:'POST'}).then(r => r.json()).then(d => {
+  var branch = getSelectedUpdateBranch();
+  fetch(API + '/api/update/check', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({branch: branch})
+  }).then(r => r.json()).then(d => {
     if (!d.ok) { el.textContent = 'Error: ' + (d.error || 'unknown'); return; }
     if (d.up_to_date) {
-      el.innerHTML = 'Up to date! <span style="color:#6BCCBD">Version: ' + d.local + '</span>';
+      el.innerHTML = 'Up to date on <span style="color:#6BCCBD">' + d.branch + '</span>! <span style="color:#6BCCBD">Version: ' + d.local + '</span>';
       document.getElementById('btn-update-now').style.display = 'none';
     } else {
-      el.innerHTML = d.behind + ' update' + (d.behind > 1 ? 's' : '') + ' available. <span style="color:#6BCCBD">Current: ' + d.local + ' &rarr; Latest: ' + d.remote + '</span>';
+      el.innerHTML = d.behind + ' update' + (d.behind > 1 ? 's' : '') + ' available on <span style="color:#6BCCBD">' + d.branch + '</span>. <span style="color:#6BCCBD">Current: ' + d.local + ' &rarr; Latest: ' + d.remote + '</span>';
       document.getElementById('btn-update-now').style.display = 'block';
     }
   }).catch(function() { el.textContent = 'Failed to check. Is the Pi online?'; });
 }
 
 function startUpdate() {
-  if (!confirm('Update InkSlab? The display and web dashboard will restart.')) return;
+  var branch = getSelectedUpdateBranch();
+  if (!confirm('Update InkSlab from branch "' + branch + '"? The display and web dashboard will restart.')) return;
   document.getElementById('update-progress').style.display = 'block';
-  document.getElementById('update-stage').textContent = 'Starting update...';
+  document.getElementById('update-stage').textContent = 'Starting update from ' + branch + '...';
   document.getElementById('update-bar').style.width = '10%';
   document.getElementById('btn-update-now').style.display = 'none';
-  fetch(API + '/api/update/start', {method:'POST'}).then(r => r.json()).then(d => {
+  fetch(API + '/api/update/start', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({branch: branch})
+  }).then(r => r.json()).then(d => {
     if (d.ok) { pollUpdate(); }
     else { document.getElementById('update-stage').textContent = 'Error: ' + (d.error || 'unknown'); }
   });
