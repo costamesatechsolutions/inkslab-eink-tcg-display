@@ -20,6 +20,25 @@ import time
 import threading
 from flask import Flask, request, jsonify, send_file, redirect, make_response
 import wifi_manager
+from inkslab_paths import (
+    APP_DIR,
+    COLLECTION_FILE,
+    COLLECTION_TRIGGER,
+    CONFIG_FILE,
+    DOWNLOAD_LOG,
+    LIBRARY_TRIGGER,
+    NEXT_TRIGGER,
+    PAUSE_FILE,
+    PREV_TRIGGER,
+    STATUS_FILE,
+    UNBOX_TRIGGER,
+    UPDATE_LOCK_FILE,
+    UPDATE_STATUS_FILE,
+    WATCHDOG_SETUP_FLAG,
+    WIFI_CONNECTED_TRIGGER,
+    WIFI_FAILED_TRIGGER,
+    WIFI_SETUP_TRIGGER,
+)
 from inkslab_plugins import (
     default_enabled_plugins,
     default_display_schedule,
@@ -36,16 +55,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
 
 VERSION = "1.0.0"
 
-# --- PATHS ---
-CONFIG_FILE = "/home/pi/inkslab_config.json"
-COLLECTION_FILE = "/home/pi/inkslab_collection.json"
-STATUS_FILE = "/tmp/inkslab_status.json"
-NEXT_TRIGGER = "/tmp/inkslab_next"
-COLLECTION_TRIGGER = "/tmp/inkslab_collection_changed"
-LIBRARY_TRIGGER = "/tmp/inkslab_library_changed"
-DOWNLOAD_LOG = "/tmp/inkslab_download.log"
-
-SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+SCRIPT_DIR = APP_DIR
 
 TCG_REGISTRY = {
     plugin_id: {
@@ -86,7 +96,6 @@ _download_log_fh = None
 _download_lock = threading.Lock()
 
 # --- WIFI SETUP MODE ---
-WATCHDOG_SETUP_FLAG = "/tmp/inkslab_watchdog_setup"
 _wifi_setup_mode = False
 _wifi_connect_result = {"status": "idle"}
 _wifi_connect_lock = threading.Lock()
@@ -423,10 +432,6 @@ def api_next():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
-
-
-PREV_TRIGGER = "/tmp/inkslab_prev"
-PAUSE_FILE = "/tmp/inkslab_pause"
 
 
 @app.route('/api/prev', methods=['POST'])
@@ -1409,8 +1414,6 @@ def api_delete():
 
 
 # --- OTA UPDATE ---
-UPDATE_STATUS_FILE = "/tmp/inkslab_update_status.json"
-
 # Fix "dubious ownership" — web service runs as root but repo is owned by pi
 subprocess.run(['git', 'config', '--global', 'safe.directory', SCRIPT_DIR],
                capture_output=True, timeout=5)
@@ -1549,7 +1552,7 @@ def api_update_check():
 @app.route('/api/update/start', methods=['POST'])
 def api_update_start():
     """Launch OTA update script detached from this process."""
-    lock_file = "/tmp/inkslab_update.lock"
+    lock_file = UPDATE_LOCK_FILE
     if os.path.exists(lock_file):
         try:
             with open(lock_file) as f:
@@ -1628,7 +1631,7 @@ def _perform_wifi_connection(ssid, password):
                 pass
             # Signal inkslab.py to refresh splash screen
             try:
-                with open("/tmp/inkslab_wifi_connected", "w") as f:
+                with open(WIFI_CONNECTED_TRIGGER, "w") as f:
                     f.write(message)
             except OSError:
                 pass
@@ -1639,7 +1642,7 @@ def _perform_wifi_connection(ssid, password):
                     "status": "failed", "error": message, "ssid": ssid,
                 }
             try:
-                with open("/tmp/inkslab_wifi_failed", "w") as f:
+                with open(WIFI_FAILED_TRIGGER, "w") as f:
                     f.write(ssid)
             except OSError:
                 pass
@@ -1651,7 +1654,7 @@ def _perform_wifi_connection(ssid, password):
                 "status": "failed", "error": str(e), "ssid": ssid,
             }
         try:
-            with open("/tmp/inkslab_wifi_failed", "w") as f:
+            with open(WIFI_FAILED_TRIGGER, "w") as f:
                 f.write(ssid)
         except OSError:
             pass
@@ -1725,7 +1728,7 @@ def api_wifi_disconnect():
         wifi_manager.start_hotspot()
         # Signal display daemon to show setup screen
         try:
-            with open("/tmp/inkslab_wifi_setup", "w") as f:
+            with open(WIFI_SETUP_TRIGGER, "w") as f:
                 f.write("1")
         except OSError:
             pass
@@ -1804,12 +1807,12 @@ def api_factory_reset():
     with _download_lock:
         _close_download_log()
     for tmp_file in [STATUS_FILE, DOWNLOAD_LOG, NEXT_TRIGGER, COLLECTION_TRIGGER, LIBRARY_TRIGGER,
-                     "/tmp/inkslab_prev", "/tmp/inkslab_pause",
-                     "/tmp/inkslab_wifi_connected", "/tmp/inkslab_wifi_failed",
-                     "/tmp/inkslab_wifi_setup", "/tmp/inkslab_watchdog_setup",
-                     "/tmp/inkslab_unbox",
-                     "/tmp/inkslab_update_status.json",
-                     "/tmp/inkslab_update.lock",
+                     PREV_TRIGGER, PAUSE_FILE,
+                     WIFI_CONNECTED_TRIGGER, WIFI_FAILED_TRIGGER,
+                     WIFI_SETUP_TRIGGER, WATCHDOG_SETUP_FLAG,
+                     UNBOX_TRIGGER,
+                     UPDATE_STATUS_FILE,
+                     UPDATE_LOCK_FILE,
                      STATUS_FILE + ".tmp"]:
         try:
             if os.path.exists(tmp_file):
@@ -1835,7 +1838,7 @@ def api_factory_reset():
     # The "Plug me in!" screen stays on the e-ink after power off — perfect for shipping.
     # When the customer plugs it in, it boots without WiFi and shows the setup screen automatically.
     try:
-        with open("/tmp/inkslab_unbox", "w") as f:
+        with open(UNBOX_TRIGGER, "w") as f:
             f.write("1")
     except OSError:
         pass

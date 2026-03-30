@@ -13,6 +13,7 @@ import os
 import re
 import time
 from typing import Dict, List, Optional
+from inkslab_paths import card_library_path, plugin_search_dirs
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         plugin_id="pokemon",
         name="Pokemon",
         kind="tcg",
-        card_library_path="/home/pi/pokemon_cards",
+        card_library_path=card_library_path("pokemon_cards"),
         accent_color="#36A5CA",
         download_script="download_cards_pokemon.py",
         description="Pokemon card slideshow mode.",
@@ -51,7 +52,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         plugin_id="mtg",
         name="Magic: The Gathering",
         kind="tcg",
-        card_library_path="/home/pi/mtg_cards",
+        card_library_path=card_library_path("mtg_cards"),
         accent_color="#6BCCBD",
         download_script="download_cards_mtg.py",
         description="Magic: The Gathering card slideshow mode.",
@@ -61,7 +62,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         plugin_id="lorcana",
         name="Disney Lorcana",
         kind="tcg",
-        card_library_path="/home/pi/lorcana_cards",
+        card_library_path=card_library_path("lorcana_cards"),
         accent_color="#C084FC",
         download_script="download_cards_lorcana.py",
         description="Disney Lorcana card slideshow mode.",
@@ -71,7 +72,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         plugin_id="custom",
         name="Custom",
         kind="tcg",
-        card_library_path="/home/pi/custom_cards",
+        card_library_path=card_library_path("custom_cards"),
         accent_color="#F59E0B",
         description="User-uploaded custom image slideshow mode.",
         settings_keys=["collection_only", "slab_header_mode", "rotation_angle", "color_saturation"],
@@ -192,10 +193,7 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
 }
 
 PLUGIN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,31}$")
-PLUGIN_DIRS = [
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "plugins"),
-    "/home/pi/inkslab_plugins",
-]
+PLUGIN_DIRS = plugin_search_dirs()
 
 
 def _safe_manifest_value(value, default=""):

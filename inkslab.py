@@ -22,6 +22,21 @@ import signal
 from PIL import Image, ImageEnhance, ImageDraw, ImageFont, ImageOps
 import wifi_manager
 from inkslab_plugins import default_enabled_plugins, get_card_libraries, normalize_display_config
+from inkslab_paths import (
+    COLLECTION_FILE,
+    COLLECTION_TRIGGER,
+    CONFIG_FILE,
+    LIBRARY_TRIGGER,
+    NEXT_TRIGGER,
+    PAUSE_FILE,
+    PREV_TRIGGER,
+    STATUS_FILE,
+    UNBOX_TRIGGER,
+    WATCHDOG_SETUP_FLAG,
+    WIFI_CONNECTED_TRIGGER,
+    WIFI_FAILED_TRIGGER,
+    WIFI_SETUP_TRIGGER,
+)
 
 # --- DEFAULT CONFIGURATION ---
 # These defaults are used if no config file exists.
@@ -48,20 +63,6 @@ TCG_LIBRARIES = get_card_libraries()
 
 # Supported image formats
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.avif')
-
-CONFIG_FILE = "/home/pi/inkslab_config.json"
-COLLECTION_FILE = "/home/pi/inkslab_collection.json"
-STATUS_FILE = "/tmp/inkslab_status.json"
-NEXT_TRIGGER = "/tmp/inkslab_next"
-PREV_TRIGGER = "/tmp/inkslab_prev"
-PAUSE_FILE = "/tmp/inkslab_pause"
-COLLECTION_TRIGGER = "/tmp/inkslab_collection_changed"
-LIBRARY_TRIGGER = "/tmp/inkslab_library_changed"
-WIFI_CONNECTED_TRIGGER = "/tmp/inkslab_wifi_connected"
-WIFI_SETUP_TRIGGER = "/tmp/inkslab_wifi_setup"
-WIFI_FAILED_TRIGGER = "/tmp/inkslab_wifi_failed"
-UNBOX_TRIGGER = "/tmp/inkslab_unbox"
-WATCHDOG_SETUP_FLAG = "/tmp/inkslab_watchdog_setup"
 
 # WiFi watchdog: if WiFi is down for this many seconds, auto-enter hotspot setup mode.
 # 30 minutes — long enough to ride out brief router reboots, short enough that the user
