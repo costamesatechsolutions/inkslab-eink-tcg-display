@@ -2463,6 +2463,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .plugin-toggle { display: flex; align-items: center; gap: 6px; color: #D8E6E4; font-size: 12px; }
 .plugin-note { font-size: 11px; color: #8899a6; margin-top: 8px; line-height: 1.4; }
+.plugin-actions { display: flex; gap: 8px; margin-top: 10px; }
 .plugin-settings { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; display: flex; flex-direction: column; gap: 8px; }
 .plugin-settings-row label { display: block; color: #6BCCBD; font-size: 11px; margin-bottom: 4px; }
 .plugin-settings-row input, .plugin-settings-row select { width: 100%; }
@@ -2964,9 +2965,16 @@ function updatePauseBtn(paused) {
 
 function refreshStatus() {
   fetch(API + '/api/status').then(r => r.json()).then(d => {
-    document.getElementById('st-tcg').textContent = (d.tcg || '\\u2014').toUpperCase();
+    var activePluginName = d.tcg || '\\u2014';
+    if (_pluginUiState && _pluginUiState.plugins && _pluginUiState.plugins[d.tcg] && _pluginUiState.plugins[d.tcg].name) {
+      activePluginName = _pluginUiState.plugins[d.tcg].name;
+    } else if (_tcgRegistry && _tcgRegistry[d.tcg] && _tcgRegistry[d.tcg].name) {
+      activePluginName = _tcgRegistry[d.tcg].name;
+    }
+    document.getElementById('st-tcg').textContent = activePluginName;
     var errRow = document.getElementById('st-error-row');
     var errEl = document.getElementById('st-error');
+    var nonCardPlugin = d.plugin_kind && d.plugin_kind !== 'tcg';
     if (d.pending) {
       errEl.textContent = d.pending;
       errRow.style.display = 'flex';
@@ -2994,7 +3002,7 @@ function refreshStatus() {
       document.getElementById('st-rarity').textContent = d.rarity || '\\u2014';
       document.getElementById('st-total').textContent = d.total_cards || '\\u2014';
       var img = document.getElementById('st-preview');
-      if (d.card_path) {
+      if (d.card_path && !nonCardPlugin) {
         var needsReload = (d.card_path !== _lastStatus.card_path
           || d.tcg !== _lastStatus.tcg
           || (_lastStatus.pending && !d.pending));
@@ -3010,13 +3018,16 @@ function refreshStatus() {
       } else {
         hidePreviewLoading();
       }
-      renderQueue(d);
+      if (nonCardPlugin) {
+        document.getElementById('queue-card').style.display = 'none';
+      } else {
+        renderQueue(d);
+      }
     }
     // Update pause button and countdown
     updatePauseBtn(d.paused);
     updateCountdown();
     var startupBlocked = !!(d.pending && String(d.pending).toLowerCase().indexOf('starting up') === 0);
-    var nonCardPlugin = d.plugin_kind && d.plugin_kind !== 'tcg';
     var controlsBlocked = startupBlocked || (!!d.display_updating && !d.card_path) || nonCardPlugin;
     var nextBtn = document.getElementById('btn-next');
     var prevBtn = document.getElementById('btn-prev');
@@ -3258,6 +3269,30 @@ function togglePluginDetail(pluginId) {
   btn.innerHTML = isOpen ? '+' : '&minus;';
 }
 
+function activatePlugin(pluginId) {
+  var rotationMinutes = (_displayPlanState && _displayPlanState.display_rotation_minutes) ? _displayPlanState.display_rotation_minutes : 10;
+  fetch(API + '/api/display_plan', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      display_style: 'single',
+      single_plugin: pluginId,
+      display_rotation_minutes: rotationMinutes
+    })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d && d.ok) {
+      showToast('Switched to ' + pluginId);
+      loadPlugins();
+      loadDisplayPlan();
+      startRapidPoll();
+    } else {
+      showToast((d && d.error) || 'Could not switch plugin');
+    }
+  }).catch(function() {
+    showToast('Could not switch plugin');
+  });
+}
+
 function loadPlugins() {
   fetch(API + '/api/plugins').then(r => r.json()).then(function(d) {
     _pluginUiState = d;
@@ -3340,6 +3375,7 @@ function loadPlugins() {
         '<div class="plugin-detail' + (detailsOpen ? ' open' : '') + '" id="plugin-detail-' + id + '">' +
           '<div style="font-size:12px;color:#D8E6E4">' + esc(plugin.description || '') + '</div>' +
           (meta.length ? '<div class="plugin-meta" style="margin-top:6px">' + esc(meta.join(' • ')) + '</div>' : '') +
+          (isRuntime ? '<div class="plugin-actions"><button class="btn btn-secondary btn-sm"' + (isEnabled ? '' : ' disabled') + ' onclick="activatePlugin(\\'' + id + '\\')">Use Now</button></div>' : '') +
           settingsHtml +
           '<div class="plugin-note">' + esc(note) + '</div>' +
         '</div>' +
