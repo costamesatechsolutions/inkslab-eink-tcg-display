@@ -2742,8 +2742,13 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
   </div>
   <div class="card">
     <h3>Delete Data</h3>
-    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Remove all downloaded card images for a TCG.</p>
-    <div id="delete-buttons" class="flex-row" style="flex-wrap:wrap;gap:6px"></div>
+    <p style="color:#6BCCBD;font-size:12px;margin-bottom:8px">Choose one data source to clear. This scales better as InkSlab gains more plugins and libraries.</p>
+    <div class="form-group" style="margin-bottom:8px">
+      <label>Data Source</label>
+      <select id="delete-source"></select>
+    </div>
+    <button class="btn btn-danger btn-block" id="delete-source-btn" onclick="deleteSelectedData()">Delete Selected Data</button>
+    <p id="delete-source-note" class="subtle-note">Select a source above to see what will be removed.</p>
     <p style="font-size:11px;color:#8899a6;margin-top:10px;text-align:center">Buttons not responding? If you have this dashboard open in multiple tabs, close the extras — that's the most common cause. Or open a new tab and go to the same address. Ctrl+Shift+R (Win) / Cmd+Shift+R (Mac) force-refreshes the cache. On mobile, open a new tab or use private / incognito.</p>
   </div>
 </div>
@@ -3890,6 +3895,32 @@ function deleteData(tcg, btn) {
     });
 }
 
+function updateDeleteSourceUI() {
+  var sel = document.getElementById('delete-source');
+  var note = document.getElementById('delete-source-note');
+  var btn = document.getElementById('delete-source-btn');
+  if (!sel || !note || !btn) return;
+  var tcg = sel.value;
+  var info = _tcgRegistry[tcg];
+  if (!tcg || !info) {
+    note.textContent = 'No deletable data sources are available right now.';
+    btn.disabled = true;
+    return;
+  }
+  var label = info.name || tcg.toUpperCase();
+  note.textContent = 'This clears the local ' + label + ' library from the device. Plugin code and settings stay intact.';
+  btn.disabled = false;
+}
+
+function deleteSelectedData() {
+  var sel = document.getElementById('delete-source');
+  var btn = document.getElementById('delete-source-btn');
+  if (!sel || !btn) return;
+  var tcg = sel.value;
+  if (!tcg) return;
+  deleteData(tcg, btn);
+}
+
 // --- OTA Update ---
 function checkUpdate() {
   var el = document.getElementById('update-info');
@@ -4112,12 +4143,17 @@ function loadDlButtons() {
   // MTG since-year filter
   var mtgSince = document.getElementById('dl-mtg-since');
   if (mtgSince) mtgSince.style.display = _tcgRegistry.mtg ? 'block' : 'none';
-  // Delete buttons
-  var delEl = document.getElementById('delete-buttons');
-  if (delEl) {
-    delEl.innerHTML = Object.entries(_tcgRegistry).filter(function(e) { return e[0] !== 'custom'; }).map(function(e) {
-      return '<button class="btn btn-danger btn-sm" style="flex:1" onclick="deleteData(\\'' + e[0] + '\\', this)">Delete ' + e[1].name + '</button>';
+  // Delete source selector
+  var delSel = document.getElementById('delete-source');
+  if (delSel) {
+    var deleteEntries = Object.entries(_tcgRegistry).filter(function(entry) {
+      return !!entry[1].path;
+    });
+    delSel.innerHTML = deleteEntries.map(function(entry) {
+      return '<option value="' + entry[0] + '">' + entry[1].name + '</option>';
     }).join('');
+    delSel.onchange = updateDeleteSourceUI;
+    updateDeleteSourceUI();
   }
 }
 
