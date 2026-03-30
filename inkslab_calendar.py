@@ -18,11 +18,40 @@ from PIL import Image, ImageDraw, ImageFont
 from inkslab_paths import CALENDAR_CACHE_FILE
 
 
+DEMO_EVENTS = [
+    {
+        "summary": "InkSlab feature review",
+        "location": "Costa Mesa Studio",
+        "all_day": False,
+        "offset_days": 0,
+        "start_time": "10:00 AM",
+        "end_time": "10:45 AM",
+    },
+    {
+        "summary": "Pack and test demo unit",
+        "location": "Workbench",
+        "all_day": False,
+        "offset_days": 0,
+        "start_time": "2:30 PM",
+        "end_time": "3:15 PM",
+    },
+    {
+        "summary": "Sketch modular app ideas",
+        "location": "All Day",
+        "all_day": True,
+        "offset_days": 1,
+        "start_time": "",
+        "end_time": "",
+    },
+]
+
+
 def get_calendar_settings(config):
     plugin_settings = config.get("plugin_settings") if isinstance(config, dict) else {}
     bucket = plugin_settings.get("calendar") if isinstance(plugin_settings, dict) else {}
     bucket = bucket if isinstance(bucket, dict) else {}
     ics_url = str(bucket.get("calendar_ics_url") or "").strip()
+    demo_mode = str(bucket.get("calendar_demo_mode") or "on").strip().lower()
     try:
         refresh_minutes = max(10, min(360, int(bucket.get("calendar_refresh_minutes", 30))))
     except (TypeError, ValueError):
@@ -33,6 +62,7 @@ def get_calendar_settings(config):
         days_ahead = 2
     return {
         "calendar_ics_url": ics_url[:240],
+        "calendar_demo_mode": "off" if demo_mode == "off" else "on",
         "calendar_refresh_minutes": refresh_minutes,
         "calendar_days_ahead": days_ahead,
     }
@@ -195,11 +225,32 @@ def _parse_ics_events(text, config):
 def fetch_calendar_snapshot(config):
     settings = get_calendar_settings(config)
     ics_url = settings["calendar_ics_url"]
+    if not ics_url and settings["calendar_demo_mode"] == "on":
+        today = datetime.now(_calendar_timezone(config)).date()
+        events = []
+        for item in DEMO_EVENTS:
+            event_day = today + timedelta(days=item["offset_days"])
+            events.append({
+                "summary": item["summary"],
+                "location": item["location"],
+                "all_day": item["all_day"],
+                "start_day": event_day.isoformat(),
+                "start_time": item["start_time"],
+                "end_time": item["end_time"],
+            })
+        return {
+            "ok": True,
+            "calendar_ics_url": "",
+            "calendar_label": "Demo Agenda",
+            "reason": "Demo events are showing until you add a private ICS feed.",
+            "events": events,
+            "updated_at": int(time.time()),
+        }
     if not ics_url:
         return {
             "ok": False,
             "calendar_label": "Calendar Agenda",
-            "reason": "Add a private ICS / iCal feed URL in Setup > Apps > Calendar Agenda.",
+            "reason": "Add a private ICS / iCal feed URL in Setup > Apps > Calendar Agenda, or turn demo mode back on.",
             "events": [],
             "updated_at": int(time.time()),
         }
@@ -295,7 +346,8 @@ def render_calendar_canvas(config):
         draw.text((200, 186), "Calendar Setup", fill=(0, 0, 0), font=font_header, anchor="mm")
         for idx, line in enumerate(_wrap_text(draw, snapshot.get("reason", "Calendar is not ready yet."), font_event, 300, 4)):
             draw.text((200, 250 + (idx * 24)), line, fill=(0, 0, 0), font=font_event, anchor="mm")
-        draw.text((200, 444), "Use a private Google, Apple, or other iCal / ICS URL.", fill=(0, 0, 255), font=font_meta, anchor="mm")
+        draw.text((200, 432), "Use a private Google, Apple, or other iCal / ICS URL.", fill=(0, 0, 255), font=font_meta, anchor="mm")
+        draw.text((200, 456), "Or turn demo mode on to preview the layout.", fill=(0, 0, 0), font=font_meta, anchor="mm")
         return canvas, snapshot
 
     events = snapshot.get("events") or []

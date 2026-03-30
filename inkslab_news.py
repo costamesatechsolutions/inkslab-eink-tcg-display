@@ -7,8 +7,10 @@ calm headlines without adding external dependencies.
 """
 
 import email.utils
+import html
 import json
 import os
+import re
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -113,6 +115,13 @@ def _child_text(node, names):
     return ""
 
 
+def _clean_feed_text(text):
+    value = html.unescape(str(text or ""))
+    value = re.sub(r"<[^>]+>", " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
 def _parse_feed(xml_bytes):
     root = ET.fromstring(xml_bytes)
     channel = None
@@ -132,8 +141,8 @@ def _parse_feed(xml_bytes):
     for child in list(channel):
         if _strip_tag(child.tag).lower() not in item_tags:
             continue
-        title = _child_text(child, {"title"}) or "Untitled"
-        summary = _child_text(child, {"description", "summary"})
+        title = _clean_feed_text(_child_text(child, {"title"}) or "Untitled")
+        summary = _clean_feed_text(_child_text(child, {"description", "summary"}))
         published = _child_text(child, {"pubdate", "published", "updated"})
         entries.append({
             "title": title[:180],
@@ -278,7 +287,7 @@ def render_news_canvas(config):
             y += 23
         summary = item.get("summary", "")
         if summary:
-            summary_lines = 3 if len(headlines) <= 3 else 2
+            summary_lines = 3 if len(headlines) <= 4 else 2
             for line in _wrap_text(draw, summary, font_summary, 320, summary_lines):
                 draw.text((52, y + 4), line, fill=(0, 0, 0), font=font_summary)
                 y += 16

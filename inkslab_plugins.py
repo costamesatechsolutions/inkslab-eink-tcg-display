@@ -149,9 +149,19 @@ BUILTIN_PLUGINS: Dict[str, PluginDefinition] = {
         description="Upcoming events from a private iCal / ICS calendar feed in a low-distraction view.",
         builtin=True,
         runtime_enabled=True,
-        settings_keys=["calendar_ics_url", "calendar_refresh_minutes", "calendar_days_ahead"],
+        settings_keys=["calendar_ics_url", "calendar_demo_mode", "calendar_refresh_minutes", "calendar_days_ahead"],
         config_schema=[
             {"key": "calendar_ics_url", "label": "Private ICS / iCal URL", "type": "text", "default": ""},
+            {
+                "key": "calendar_demo_mode",
+                "label": "Demo Mode",
+                "type": "select",
+                "default": "on",
+                "options": [
+                    {"value": "on", "label": "On"},
+                    {"value": "off", "label": "Off"},
+                ],
+            },
             {"key": "calendar_refresh_minutes", "label": "Refresh Minutes", "type": "number", "default": 30},
             {"key": "calendar_days_ahead", "label": "Days Ahead", "type": "number", "default": 2},
         ],
