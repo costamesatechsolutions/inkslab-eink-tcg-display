@@ -4,6 +4,7 @@ Runtime rendering helpers for built-in non-card plugins.
 """
 
 from inkslab_calendar import calendar_wait_seconds, render_calendar_canvas
+from inkslab_external_plugins import render_external_plugin
 from inkslab_market import market_wait_seconds, render_market_canvas
 from inkslab_news import news_wait_seconds, render_news_canvas
 from inkslab_reminders import reminders_wait_seconds, render_reminders_canvas
@@ -109,4 +110,4 @@ def render_runtime_plugin(plugin_id, config):
             "rarity": plugin_snapshot.get("reason") or "Local reminders",
             "error": plugin_snapshot.get("reason", "Reminders are temporarily unavailable."),
         }
-    return None, None
+    return render_external_plugin(plugin_id, config)

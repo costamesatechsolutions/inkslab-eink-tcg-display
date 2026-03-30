@@ -2,8 +2,11 @@
   "plugin_id": "example_ambient",
   "name": "Example Ambient",
   "kind": "module",
+  "version": "0.1.0",
+  "author": "InkSlab",
   "accent_color": "#5AA9E6",
   "description": "Starter manifest for a future community InkSlab plugin.",
+  "runtime_enabled": true,
   "settings_keys": [
     "example_title",
     "example_mode",

@@ -1219,7 +1219,9 @@ def api_download_start():
         if not reg or not reg.get("download_script"):
             return jsonify({"ok": False, "error": "Unknown TCG or no download script"})
 
-        cmd = ["python3", os.path.join(SCRIPT_DIR, "scripts", reg["download_script"])]
+        download_script = str(reg["download_script"])
+        script_path = download_script if os.path.isabs(download_script) else os.path.join(SCRIPT_DIR, "scripts", download_script)
+        cmd = ["python3", script_path]
         if tcg == "mtg" and since:
             cmd.extend(["--since", str(since)])
 
@@ -2472,6 +2474,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 .plugin-note { font-size: 11px; color: #8899a6; margin-top: 8px; line-height: 1.4; }
 .plugin-actions { display: flex; gap: 8px; margin-top: 10px; }
 .plugin-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid #1F333F; }
+.plugin-section-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6BCCBD; margin: 14px 2px 6px; }
 .plugin-settings { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
 .plugin-savebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 12px; padding: 10px 12px; border-radius: 8px; background: #132E3E; border: 1px solid #36A5CA33; }
 .plugin-savebar-note { font-size: 11px; color: #8899a6; line-height: 1.4; }
@@ -3296,25 +3299,37 @@ function loadPlugins() {
     var enabledPlugins = Array.isArray(d.enabled_plugins) ? d.enabled_plugins : [];
     var pluginSettings = d.plugin_settings || {};
     var active = d.active_plugin || '';
-    var entries = Object.entries(plugins);
+    var entries = Object.entries(plugins).sort(function(a, b) {
+      var aPlugin = a[1] || {};
+      var bPlugin = b[1] || {};
+      var aSource = aPlugin.source === 'local-manifest' ? 1 : 0;
+      var bSource = bPlugin.source === 'local-manifest' ? 1 : 0;
+      if (aSource !== bSource) return aSource - bSource;
+      return String(aPlugin.name || a[0]).localeCompare(String(bPlugin.name || b[0]));
+    });
     var activeName = (plugins[active] && plugins[active].name) ? plugins[active].name : active;
     summaryEl.textContent = enabledPlugins.length + ' app' + (enabledPlugins.length === 1 ? '' : 's') + ' enabled. Showing now: ' + (activeName || '-');
+    var lastSection = '';
     listEl.innerHTML = entries.map(function(entry) {
       var id = entry[0];
       var plugin = entry[1] || {};
       var isRuntime = !!plugin.runtime_enabled;
       var isEnabled = enabledPlugins.indexOf(id) !== -1;
+      var sourceLabel = plugin.source === 'local-manifest' ? 'Community' : 'Built-in';
       var badge = id === active
         ? '<span class="plugin-badge">Active</span>'
         : (isRuntime
           ? '<span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">' + (isEnabled ? 'Enabled' : 'Disabled') + '</span>'
           : '<span class="plugin-badge" style="background:#4B5563;color:#FCFDF0">Coming Soon</span>');
       var meta = [];
+      meta.push(sourceLabel);
       if (plugin.kind) meta.push(plugin.kind.toUpperCase());
       if (plugin.download_script) meta.push('card data');
       if (plugin.config_schema && plugin.config_schema.length) meta.push(plugin.config_schema.length + ' settings');
-      if (plugin.source === 'local-manifest') meta.push('manifest only');
+      if (plugin.version) meta.push('v' + plugin.version);
+      if (plugin.author) meta.push(plugin.author);
       var summaryParts = [];
+      summaryParts.push(sourceLabel);
       if (plugin.kind) summaryParts.push(plugin.kind.toUpperCase());
       if (plugin.download_script) summaryParts.push('card data');
       if (!isRuntime) summaryParts.push('roadmap');
@@ -3323,6 +3338,9 @@ function loadPlugins() {
       var note = isRuntime
         ? 'Enable this app if you want InkSlab to use it. Then use Show Now for a quick test, or include it in Display behavior.'
         : 'This app is part of the modular roadmap and is not runnable yet.';
+      if (plugin.source === 'local-manifest' && isRuntime) {
+        note = 'This community plugin is installed locally. Configure it here, then use Show Now or include it in Display behavior.';
+      }
       var settingsHtml = '';
       if (plugin.config_schema && plugin.config_schema.length) {
         settingsHtml = '<div class="plugin-settings">' + plugin.config_schema.map(function(field) {
@@ -3352,7 +3370,13 @@ function loadPlugins() {
           return '<div class="plugin-settings-row"><label for="' + esc(fieldId) + '">' + esc(field.label || fieldKey) + '</label>' + inputHtml + '</div>';
         }).join('') + '</div>';
       }
-      return '<div class="plugin-item' + (id === active ? ' active' : '') + '">' +
+      var section = plugin.source === 'local-manifest' ? 'community' : 'builtin';
+      var sectionHtml = '';
+      if (section !== lastSection) {
+        sectionHtml = '<div class="plugin-section-label">' + (section === 'community' ? 'Community Plugins' : 'Built-in Apps') + '</div>';
+        lastSection = section;
+      }
+      return sectionHtml + '<div class="plugin-item' + (id === active ? ' active' : '') + '">' +
         '<div class="plugin-top">' +
           '<div class="plugin-main">' +
             '<div class="plugin-name">' + esc(plugin.name || id) + '</div>' +

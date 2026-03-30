@@ -23,6 +23,7 @@ NEWS_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_news_cache.json")
 CALENDAR_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_calendar_cache.json")
 MARKET_CACHE_FILE = os.path.join(RUNTIME_DIR, "inkslab_market_cache.json")
 CURRENT_PREVIEW_FILE = os.path.join(RUNTIME_DIR, "inkslab_current_preview.png")
+PLUGIN_RUNTIME_CACHE_DIR = os.path.join(RUNTIME_DIR, "inkslab_plugin_runtime")
 
 NEXT_TRIGGER = os.path.join(RUNTIME_DIR, "inkslab_next")
 PREV_TRIGGER = os.path.join(RUNTIME_DIR, "inkslab_prev")

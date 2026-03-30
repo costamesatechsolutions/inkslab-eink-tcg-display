@@ -32,6 +32,9 @@ class PluginDefinition:
     manifest_path: Optional[str] = None
     runtime_enabled: bool = True
     config_schema: Optional[List[Dict[str, str]]] = None
+    version: str = ""
+    author: str = ""
+    entrypoint: str = "__init__.py"
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -316,19 +319,36 @@ def _load_external_plugin_manifest(manifest_path: str) -> Optional[PluginDefinit
     config_schema = _safe_manifest_schema(manifest.get("config_schema"))
     if config_schema and not settings_keys:
         settings_keys = [str(field.get("key")) for field in config_schema if field.get("key")]
+    version = _safe_manifest_value(manifest.get("version"))[:24]
+    author = _safe_manifest_value(manifest.get("author"))[:48]
+    entrypoint = os.path.basename(_safe_manifest_value(manifest.get("entrypoint"), "__init__.py")) or "__init__.py"
+    runtime_enabled = bool(manifest.get("runtime_enabled")) and os.path.isfile(os.path.join(os.path.dirname(manifest_path), entrypoint))
+    card_dir_name = os.path.basename(_safe_manifest_value(manifest.get("card_library_dir")))
+    card_dir_path = card_library_path(card_dir_name) if card_dir_name else None
+    download_script = _safe_manifest_value(manifest.get("download_script"))[:120]
+    if download_script:
+        candidate = os.path.join(os.path.dirname(manifest_path), os.path.basename(download_script))
+        download_script = candidate if os.path.isfile(candidate) else None
+    else:
+        download_script = None
 
     return PluginDefinition(
         plugin_id=plugin_id,
         name=name,
         kind=kind,
+        card_library_path=card_dir_path,
         accent_color=_safe_manifest_value(manifest.get("accent_color")) or None,
+        download_script=download_script,
         description=_safe_manifest_value(manifest.get("description"))[:160],
         builtin=False,
         settings_keys=settings_keys,
         source="local-manifest",
         manifest_path=manifest_path,
-        runtime_enabled=False,
+        runtime_enabled=runtime_enabled,
         config_schema=config_schema,
+        version=version,
+        author=author,
+        entrypoint=entrypoint,
     )
 
 

@@ -212,10 +212,10 @@ InkSlab is moving toward a modular app system on the experimental branch.
 - Local plugin manifests are discovered from:
   - `/home/pi/inkslab/plugins`
   - `/home/pi/inkslab_plugins`
-- Manifest-defined settings can appear in the `Setup > Apps` UI without executing plugin code
+- Manifest-defined settings can appear in the `Setup > Apps` UI
+- Local third-party plugins can execute a Python `render(settings, context)` entry point
 
 ### What is still in progress
-- Safe execution of third-party plugin Python code
 - Install-from-GitHub flows in the web UI
 - Stronger sandboxing and trust controls for community plugins
 
@@ -229,7 +229,7 @@ plugins/example_ambient/
 
 It includes:
 - `manifest.json` for plugin metadata and settings schema
-- `__init__.py` as the future render entry point shape
+- `__init__.py` as a working render entry point example
 - `README.md` with current expectations
 
 ### Manifest Shape
@@ -251,7 +251,7 @@ It includes:
 }
 ```
 
-For now, think of community plugins as `manifest-first`: InkSlab can discover them, show their metadata, and preserve consistent settings while the live execution contract is being finished.
+For now, think of community plugins as `local-first`: InkSlab can discover them, show their metadata, preserve consistent settings, and execute a local Python render function. The next major step is a clean install/update flow for GitHub-hosted community plugins from the web UI.
 
 ---
 
