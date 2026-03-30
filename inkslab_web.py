@@ -32,6 +32,7 @@ COLLECTION_FILE = "/home/pi/inkslab_collection.json"
 STATUS_FILE = "/tmp/inkslab_status.json"
 NEXT_TRIGGER = "/tmp/inkslab_next"
 COLLECTION_TRIGGER = "/tmp/inkslab_collection_changed"
+LIBRARY_TRIGGER = "/tmp/inkslab_library_changed"
 DOWNLOAD_LOG = "/tmp/inkslab_download.log"
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -162,6 +163,23 @@ def _close_download_log():
         except Exception:
             pass
         _download_log_fh = None
+
+
+def _signal_library_changed(tcg):
+    """Notify the display daemon when active-library contents changed."""
+    if not tcg:
+        return
+    try:
+        config = load_config()
+    except Exception:
+        config = {}
+    if config.get("active_tcg") != tcg:
+        return
+    try:
+        with open(LIBRARY_TRIGGER, 'w') as f:
+            f.write(tcg)
+    except OSError:
+        pass
 
 
 # --- HELPERS ---
@@ -1094,6 +1112,7 @@ def api_download_stop():
 
     with _download_lock:
         if _download_proc and _download_proc.poll() is None:
+            tcg = _download_tcg
             try:
                 _download_proc.send_signal(signal.SIGTERM)
                 _download_proc.wait(timeout=5)
@@ -1105,7 +1124,8 @@ def api_download_stop():
             _download_proc = None
             _download_tcg = None
             _close_download_log()
-            _cache_invalidate('storage')
+            _cache_invalidate('storage', 'rarities_' + tcg, 'sets_' + tcg)
+            _signal_library_changed(tcg)
             return jsonify({"ok": True})
     return jsonify({"ok": False, "error": "No download running"})
 
@@ -1121,10 +1141,12 @@ def api_download_status():
             running = True
         elif _download_proc:
             # Process finished — close log file handle and clean up
+            finished_tcg = tcg
             _close_download_log()
             _download_proc = None
             _download_tcg = None
-            _cache_invalidate('storage')
+            _cache_invalidate('storage', 'rarities_' + finished_tcg, 'sets_' + finished_tcg)
+            _signal_library_changed(finished_tcg)
             tcg = None
         else:
             tcg = None
@@ -1566,7 +1588,7 @@ def api_factory_reset():
     # 5. Clean up temp files, logs, and user traces
     with _download_lock:
         _close_download_log()
-    for tmp_file in [STATUS_FILE, DOWNLOAD_LOG, NEXT_TRIGGER, COLLECTION_TRIGGER,
+    for tmp_file in [STATUS_FILE, DOWNLOAD_LOG, NEXT_TRIGGER, COLLECTION_TRIGGER, LIBRARY_TRIGGER,
                      "/tmp/inkslab_prev", "/tmp/inkslab_pause",
                      "/tmp/inkslab_wifi_connected", "/tmp/inkslab_wifi_failed",
                      "/tmp/inkslab_wifi_setup", "/tmp/inkslab_watchdog_setup",

@@ -174,6 +174,7 @@ Once running, everything is managed from the web dashboard — no SSH needed. Th
 ### Downloads Tab
 - **Smart Storage:** View high-speed, native disk space calculations to see exactly how much SD card space you have left
 - **Download Cards:** Pull down Pokemon, MTG, or Lorcana cards directly from the dashboard with a live progress log
+- **Auto-Refresh After Downloads:** When a download finishes, InkSlab automatically refreshes that TCG's deck so the new cards join the rotation without manual switching
 - **MTG Year Filter:** Magic is massive. Save SD card space by entering a year (e.g., `2020`) to only download MTG sets released from that year onward
 - **Custom Images:** Create folders, upload your own PNG/JPG images, edit card metadata (name, number, rarity), rename or delete sets
 - Delete card data with a safety confirmation

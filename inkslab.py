@@ -58,6 +58,7 @@ NEXT_TRIGGER = "/tmp/inkslab_next"
 PREV_TRIGGER = "/tmp/inkslab_prev"
 PAUSE_FILE = "/tmp/inkslab_pause"
 COLLECTION_TRIGGER = "/tmp/inkslab_collection_changed"
+LIBRARY_TRIGGER = "/tmp/inkslab_library_changed"
 WIFI_CONNECTED_TRIGGER = "/tmp/inkslab_wifi_connected"
 WIFI_SETUP_TRIGGER = "/tmp/inkslab_wifi_setup"
 WIFI_FAILED_TRIGGER = "/tmp/inkslab_wifi_failed"
@@ -997,7 +998,8 @@ def wait_with_polling(seconds, config_check_interval=5):
     """Sleep for `seconds`, checking triggers every 1s and config every 5s.
 
     While PAUSE_FILE exists, the countdown freezes (stays in loop indefinitely).
-    Returns (config, action) where action is 'next', 'prev', 'tcg_changed', or None.
+    Returns (config, action) where action is 'next', 'prev', 'tcg_changed',
+    'collection_changed', 'library_changed', or None.
     """
     config = load_config()
     last_config_check = time.time()
@@ -1022,6 +1024,15 @@ def wait_with_polling(seconds, config_check_interval=5):
                 pass
             logger.info("Collection changed trigger detected")
             return load_config(), "collection_changed"
+
+        # Check for library change trigger (new downloads or deletions)
+        if os.path.exists(LIBRARY_TRIGGER):
+            try:
+                os.remove(LIBRARY_TRIGGER)
+            except OSError:
+                pass
+            logger.info("Library changed trigger detected")
+            return load_config(), "library_changed"
 
         # Check for skip/next trigger
         if os.path.exists(NEXT_TRIGGER):
@@ -1357,7 +1368,7 @@ def main():
                 new_tcg = config["active_tcg"]
                 if (new_tcg != active_tcg
                         or config["collection_only"] != _deck_collection_only
-                        or action == "collection_changed"):
+                        or action in ("collection_changed", "library_changed")):
                     rebuild_deck()
                     _no_cards_shown = False  # Show updated screen if TCG changed
                 else:
@@ -1550,8 +1561,9 @@ def main():
                     remaining = max(0, next_change - int(time.time())) if next_change else wait
                     config, action = wait_with_polling(remaining)
 
-                # Collection content changed — rebuild deck but keep showing current card
-                if action == "collection_changed" and config["collection_only"]:
+                # Library or collection content changed — rebuild deck but keep showing current card
+                if action in ("collection_changed", "library_changed") and (
+                        action == "library_changed" or config["collection_only"]):
                     rebuild_deck(preserve_history=True)
                     if deck.total == 0:
                         break  # Back to no-cards loop
@@ -1584,7 +1596,7 @@ def main():
                         "paused": paused,
                         "interval": wait,
                     })
-                    logger.info(f"Collection updated — deck rebuilt ({deck.total} cards), queue refreshed")
+                    logger.info(f"Library updated — deck rebuilt ({deck.total} cards), queue refreshed")
                     config, action = wait_with_polling(remaining)
                     if action == "prev":
                         if len(deck.history) > 1:
@@ -1624,6 +1636,7 @@ def main():
                 new_tcg = config["active_tcg"]
                 needs_rebuild = (new_tcg != active_tcg
                                  or config["collection_only"] != _deck_collection_only
+                                 or action == "library_changed"
                                  or (action == "collection_changed" and config["collection_only"]))
                 if needs_rebuild:
                     rebuild_deck(preserve_history=(new_tcg == active_tcg))
