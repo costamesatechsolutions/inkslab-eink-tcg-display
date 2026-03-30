@@ -8,6 +8,7 @@ internal plugins so the daemon and web UI can share a single source of truth.
 """
 
 from dataclasses import asdict, dataclass
+import time
 from typing import Dict, List, Optional
 
 
@@ -111,11 +112,12 @@ def default_display_schedule(default_plugin: str = "pokemon") -> List[Dict[str, 
     """Return a simple all-day schedule seeded with one plugin."""
     plugin_id = normalize_active_plugin(default_plugin)
     return [{
-        "plugin_id": plugin_id,
+        "plugin_ids": [plugin_id],
         "label": "All Day",
         "start_hour": 0,
         "end_hour": 24,
         "enabled": True,
+        "rotation_minutes": 10,
     }]
 
 
@@ -126,7 +128,17 @@ def normalize_display_schedule(schedule, default_plugin: str = "pokemon") -> Lis
         for item in schedule[:8]:
             if not isinstance(item, dict):
                 continue
-            plugin_id = normalize_active_plugin(item.get("plugin_id"), default_plugin)
+            raw_ids = item.get("plugin_ids")
+            if not isinstance(raw_ids, list):
+                legacy_single = item.get("plugin_id")
+                raw_ids = [legacy_single] if legacy_single else [default_plugin]
+            plugin_ids = []
+            for raw_id in raw_ids[:8]:
+                normalized_id = normalize_active_plugin(raw_id, default_plugin)
+                if normalized_id not in plugin_ids:
+                    plugin_ids.append(normalized_id)
+            if not plugin_ids:
+                plugin_ids = [normalize_active_plugin(default_plugin)]
             try:
                 start_hour = max(0, min(23, int(item.get("start_hour", 0))))
             except (TypeError, ValueError):
@@ -137,17 +149,49 @@ def normalize_display_schedule(schedule, default_plugin: str = "pokemon") -> Lis
                 end_hour = 24
             if end_hour <= start_hour:
                 end_hour = min(24, start_hour + 1)
-            label = str(item.get("label", "")).strip()[:40] or plugin_id.replace("_", " ").title()
+            try:
+                rotation_minutes = max(1, min(1440, int(item.get("rotation_minutes", 10))))
+            except (TypeError, ValueError):
+                rotation_minutes = 10
+            label = str(item.get("label", "")).strip()[:40] or plugin_ids[0].replace("_", " ").title()
             normalized.append({
-                "plugin_id": plugin_id,
+                "plugin_ids": plugin_ids,
                 "label": label,
                 "start_hour": start_hour,
                 "end_hour": end_hour,
                 "enabled": bool(item.get("enabled", True)),
+                "rotation_minutes": rotation_minutes,
             })
     if not normalized:
         return default_display_schedule(default_plugin)
     return normalized
+
+
+def resolve_active_plugin(config: Dict[str, object], now_struct=None) -> str:
+    """Resolve the currently active plugin from single/scheduled display config."""
+    single_plugin = normalize_active_plugin(
+        config.get("single_plugin") or config.get("active_plugin") or config.get("active_tcg"),
+        "pokemon",
+    )
+    mode = str(config.get("display_mode") or "single").strip().lower()
+    if mode != "schedule":
+        return single_plugin
+
+    schedule = normalize_display_schedule(config.get("display_schedule"), single_plugin)
+    now_struct = now_struct or time.localtime()
+    current_hour = now_struct.tm_hour
+    current_minute = now_struct.tm_hour * 60 + now_struct.tm_min
+    for item in schedule:
+        if not item.get("enabled", True):
+            continue
+        if item["start_hour"] <= current_hour < item["end_hour"]:
+            plugin_ids = item.get("plugin_ids") or [single_plugin]
+            if len(plugin_ids) == 1:
+                return plugin_ids[0]
+            rotation_minutes = max(1, int(item.get("rotation_minutes", 10)))
+            slot = (current_minute // rotation_minutes) % len(plugin_ids)
+            return plugin_ids[slot]
+    return single_plugin
 
 
 def normalize_display_config(config: Dict[str, object]) -> Dict[str, object]:
@@ -164,7 +208,7 @@ def normalize_display_config(config: Dict[str, object]) -> Dict[str, object]:
     normalized["single_plugin"] = single_plugin
     normalized["display_mode"] = mode
     normalized["display_schedule"] = schedule
-    # Current app behavior still follows a single active plugin.
-    normalized["active_plugin"] = single_plugin
-    normalized["active_tcg"] = single_plugin
+    resolved_plugin = resolve_active_plugin(normalized)
+    normalized["active_plugin"] = resolved_plugin
+    normalized["active_tcg"] = resolved_plugin
     return normalized

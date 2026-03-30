@@ -3140,19 +3140,22 @@ function loadDisplayPlan() {
     var mode = d.display_mode || 'single';
     var schedule = d.display_schedule || [];
     if (mode === 'schedule') {
-      summaryEl.textContent = 'Schedule mode is enabled. The saved plan below is ready for future scheduled playback.';
+      summaryEl.textContent = 'Schedule mode is enabled. Active right now: ' + (d.active_plugin || '-') + '.';
     } else {
       summaryEl.textContent = 'Single mode is active. Current plugin: ' + (d.single_plugin || d.active_plugin || '-');
     }
     listEl.innerHTML = schedule.map(function(item) {
       var title = esc(item.label || item.plugin_id || '');
-      var plugin = esc(item.plugin_id || '');
+      var pluginIds = Array.isArray(item.plugin_ids) ? item.plugin_ids : (item.plugin_id ? [item.plugin_id] : []);
+      var pluginLabel = esc(pluginIds.join(' → '));
       var timeLabel = String(item.start_hour).padStart(2, '0') + ':00 - ' + String(item.end_hour).padStart(2, '0') + ':00';
       var disabled = item.enabled ? '' : ' <span class="plugin-badge" style="background:#8899a6;color:#FCFDF0">Disabled</span>';
+      var rotation = pluginIds.length > 1 ? 'Rotates every ' + (item.rotation_minutes || 10) + ' min' : 'Single plugin block';
       return '<div class="schedule-item">' +
         '<div class="schedule-time">' + esc(timeLabel) + disabled + '</div>' +
         '<div class="schedule-title">' + title + '</div>' +
-        '<div class="plugin-meta" style="margin-top:4px">Plugin: ' + plugin + '</div>' +
+        '<div class="plugin-meta" style="margin-top:4px">Plugins: ' + pluginLabel + '</div>' +
+        '<div class="plugin-meta" style="margin-top:2px">' + esc(rotation) + '</div>' +
       '</div>';
     }).join('');
   }).catch(function() {
