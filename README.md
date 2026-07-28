@@ -4,7 +4,7 @@ A Raspberry Pi-powered e-ink display that shows your Pokemon, Magic: The Gatheri
 
 **No command line needed.** Pre-built units have built-in WiFi setup — just power on, connect to the InkSlab network, and pick your WiFi. Everything else runs through a clean web dashboard — including software updates.
 
-**By [Costa Mesa Tech Solutions](https://github.com/costamesatechsolutions)** (a brand of Pine Heights Ventures LLC)
+**By Pine Heights Ventures LLC dba [Costa Mesa Tech Solutions](https://github.com/costamesatechsolutions)** 
 
 ---
 
@@ -328,7 +328,7 @@ AGPL-3.0 — see [LICENSE](LICENSE)
 
 ## Disclaimer
 
-InkSlab is an independent open-source hardware project by Pine Heights Ventures LLC. It is not produced by, affiliated with, or endorsed by Nintendo, The Pokemon Company, Wizards of the Coast, Hasbro, Disney, Ravensburger, or any trading card game publisher. All card names, artwork, and trademarks are property of their respective owners. InkSlab does not distribute card artwork — images are downloaded directly from publicly available APIs at the user's request.
+InkSlab is an independent open-source hardware project by Pine Heights Ventures LLC dba Costa Mesa Tech Solutions. It is not produced by, affiliated with, or endorsed by Nintendo, The Pokemon Company, Wizards of the Coast, Hasbro, Disney, Ravensburger, or any trading card game publisher. All card names, artwork, and trademarks are property of their respective owners. InkSlab does not distribute card artwork — images are downloaded directly from publicly available APIs at the user's request.
 
 ---
 
