@@ -248,16 +248,7 @@ def rarity_sort_key(rarity):
 
 
 def get_local_ip():
-    try:
-        result = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=5)
-        parts = result.stdout.strip().split()
-        # Filter out hotspot IP (10.42.*) to return the real LAN address
-        for ip in parts:
-            if not ip.startswith("10.42."):
-                return ip
-        return parts[0] if parts else None
-    except Exception:
-        return None
+    return wifi_manager.get_local_ip()
 
 
 # --- API ROUTES ---

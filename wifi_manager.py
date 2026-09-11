@@ -9,6 +9,7 @@ import os
 import subprocess
 import logging
 import time
+import ipaddress
 
 logger = logging.getLogger(__name__)
 
@@ -140,18 +141,33 @@ def get_signal_strength():
     return None
 
 
+def _usable_lan_ipv4(address):
+    """Return a LAN IPv4 string if address is safe to show to users."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return None
+
+    if ip.version != 4:
+        return None
+    if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+        return None
+    if str(ip) == AP_IP or str(ip).startswith("10.42."):
+        return None
+    return str(ip)
+
+
 def get_local_ip():
-    """Get the Pi's local IP address (non-hotspot)."""
+    """Get the Pi's browser-friendly LAN IPv4 address (non-hotspot)."""
     try:
         result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5)
-        parts = result.stdout.strip().split()
-        # Filter out the hotspot IP
-        for ip in parts:
-            if ip != AP_IP and not ip.startswith("10.42."):
+        for address in result.stdout.strip().split():
+            ip = _usable_lan_ipv4(address)
+            if ip:
                 return ip
-        return parts[0] if parts else None
     except Exception:
-        return None
+        pass
+    return None
 
 
 def scan_networks():

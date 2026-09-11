@@ -185,17 +185,7 @@ def _is_card_image(filename):
 
 def get_local_ip():
     """Get the Pi's local IP address (non-hotspot)."""
-    try:
-        import subprocess
-        result = subprocess.run(['hostname', '-I'], capture_output=True, text=True, timeout=5)
-        parts = result.stdout.strip().split()
-        # Filter out hotspot IPs so splash screen shows the real LAN address
-        for ip in parts:
-            if not ip.startswith("10.42."):
-                return ip
-        return parts[0] if parts else None
-    except Exception:
-        return None
+    return wifi_manager.get_local_ip()
 
 
 def make_qr(url, box_size=4, border=1):
