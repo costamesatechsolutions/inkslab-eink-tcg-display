@@ -2532,7 +2532,7 @@ select, input[type=number] { background: #1F333F; color: #D8E6E4; border: 1px so
 <div id="toast" style="display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#6BCCBD;color:#010001;padding:10px 24px;border-radius:20px;font-size:13px;font-weight:600;z-index:200;opacity:0;transition:opacity 0.3s;pointer-events:none;"></div>
 
 <div class="footer">
-  <div>&copy; 2026 Pine Heights Ventures LLC dba Costa Mesa Tech Solutions. All rights reserved.</div>
+  <div>&copy; 2026 Pine Heights Ventures LLC dba Costa Mesa Tech Solutions. Licensed under AGPL-3.0.</div>
   <div class="ip" id="footer-ip"></div>
 </div>
 
