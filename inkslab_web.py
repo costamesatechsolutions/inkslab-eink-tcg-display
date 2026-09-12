@@ -3691,11 +3691,19 @@ if __name__ == '__main__':
         is_connected = wifi_manager.is_wifi_connected()
         _logger.info("WiFi check: connected=%s, has_profile=%s", is_connected, has_profile)
 
-        if has_profile:
-            _logger.info("WiFi profile exists — serving dashboard (connected=%s)", is_connected)
+        if has_profile and not is_connected:
+            _logger.info("WiFi profile exists but no usable IPv4 yet — waiting up to 60s...")
+            for _ in range(12):
+                time.sleep(5)
+                is_connected = wifi_manager.is_wifi_connected()
+                if is_connected:
+                    break
+
+        if has_profile and is_connected:
+            _logger.info("WiFi profile exists and IPv4 is ready — serving dashboard")
         elif not is_connected:
             _wifi_setup_mode = True
-            _logger.info("No WiFi profile found — entering setup mode")
+            _logger.info("No usable IPv4 connection found — entering setup mode")
             # Retry hotspot startup — critical for first boot, user has no other way in
             for _hotspot_attempt in range(1, 4):
                 if wifi_manager.start_hotspot():

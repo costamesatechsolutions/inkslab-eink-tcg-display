@@ -1213,13 +1213,8 @@ def main():
                 logger.info("WiFi connected after waiting.")
                 break
         if not wifi_connected:
-            logger.warning("WiFi profile exists but did not connect within 60s — showing splash anyway.")
-            wifi_connected = True  # Don't show setup screen when a profile is configured
-            # Seed WiFi watchdog with 25 minutes already "elapsed" so we only wait
-            # ~5 more minutes before auto-entering hotspot mode. The 60s boot wait
-            # already proved the network is unreachable — don't make the user stare
-            # at an unreachable device for another 30 minutes.
-            _wifi_down_since = time.time() - (WIFI_WATCHDOG_TIMEOUT - 300)
+            logger.warning("WiFi profile exists but no usable IPv4 after 60s — entering setup mode.")
+            has_profile = False
 
     # After WiFi associates, DHCP lease assignment can lag a few seconds behind —
     # especially on a busy first boot (filesystem resize, SSH key gen, etc.).
@@ -1232,7 +1227,9 @@ def main():
                 break
             time.sleep(5)
         if not _ip_ready:
-            logger.warning("WiFi connected but no IP after 30s — splash may show without address")
+            logger.warning("WiFi connected but no usable IPv4 after 30s — entering setup mode")
+            wifi_connected = False
+            has_profile = False
 
     # E-ink render time: Spectra 6 (7-color) takes ~30s to physically draw.
     # After that, the user needs time to actually read the screen content.

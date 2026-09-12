@@ -55,8 +55,24 @@ def _split_nmcli_escaped(line):
     return parts
 
 
+def _usable_lan_ipv4(address):
+    """Return a LAN IPv4 string if address is safe to show to users."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return None
+
+    if ip.version != 4:
+        return None
+    if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+        return None
+    if str(ip) == AP_IP or str(ip).startswith("10.42."):
+        return None
+    return str(ip)
+
+
 def _has_real_ip():
-    """Fallback check: does wlan0 have a non-hotspot, non-loopback IP?"""
+    """Fallback check: does wlan0 have a usable non-hotspot IPv4 address?"""
     try:
         # Check wlan0 specifically to avoid false positives from other interfaces
         result = subprocess.run(
@@ -69,7 +85,7 @@ def _has_real_ip():
             for i, part in enumerate(parts):
                 if part == "inet" and i + 1 < len(parts):
                     ip = parts[i + 1].split("/")[0]
-                    if ip and not ip.startswith("127.") and not ip.startswith("10.42."):
+                    if _usable_lan_ipv4(ip):
                         return True
     except Exception:
         pass
@@ -77,7 +93,7 @@ def _has_real_ip():
 
 
 def is_wifi_connected():
-    """Check if wlan0 has an active non-hotspot WiFi connection.
+    """Check if wlan0 has an active non-hotspot WiFi connection with IPv4.
     Falls back to IP address check if nmcli fails."""
     rc, out, _ = _run_nmcli(["-t", "-e", "yes", "-f", "TYPE,NAME,DEVICE", "con", "show", "--active"])
     if rc != 0:
@@ -90,7 +106,7 @@ def is_wifi_connected():
             conn_type, name, device = parts[0], parts[1], parts[2]
             # 802-11-wireless is WiFi; ignore our hotspot
             if "wireless" in conn_type and device == "wlan0" and name != HOTSPOT_CON_NAME:
-                return True
+                return _has_real_ip()
     # nmcli says no WiFi, but double-check with IP as safety net
     return _has_real_ip()
 
@@ -139,22 +155,6 @@ def get_signal_strength():
             except (ValueError, IndexError):
                 pass
     return None
-
-
-def _usable_lan_ipv4(address):
-    """Return a LAN IPv4 string if address is safe to show to users."""
-    try:
-        ip = ipaddress.ip_address(address)
-    except ValueError:
-        return None
-
-    if ip.version != 4:
-        return None
-    if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
-        return None
-    if str(ip) == AP_IP or str(ip).startswith("10.42."):
-        return None
-    return str(ip)
 
 
 def get_local_ip():
@@ -339,17 +339,18 @@ def connect_to_network(ssid, password):
         _run_nmcli(["con", "delete", "id", ssid], timeout=10)
         return False, error_msg
 
-    # Wait for an IP address (up to 30 seconds — Pi Zero DHCP can be slow)
-    for _ in range(30):
+    # Wait for an IPv4 address (up to 60 seconds — Pi Zero DHCP can be slow)
+    for _ in range(60):
         time.sleep(1)
         ip = get_local_ip()
         if ip:
             logger.info("Connected to '%s' with IP %s", ssid, ip)
             return True, ip
 
-    # Connected but no IP yet — still report success so splash screen shows
-    logger.warning("Connected to '%s' but no IP obtained within 30s", ssid)
-    return True, "connected (no IP yet)"
+    # Associated but no usable IPv4 means the customer cannot reach the dashboard.
+    logger.warning("Connected to '%s' but no IPv4 address obtained within 60s", ssid)
+    _run_nmcli(["con", "delete", "id", ssid], timeout=10)
+    return False, "Connected to WiFi, but no IPv4 address was assigned. Check DHCP/router settings and try again."
 
 
 def get_wifi_status():
